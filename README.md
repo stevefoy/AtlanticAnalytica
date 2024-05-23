@@ -1,6 +1,7 @@
 # PlantCLEF 2024
 
-Submission code for ID Atlantic and reference paper. Please cite if you find it useful!
+Submission code for Atlantic. Please cite if you find it useful!
+<img src="./sample_images/CCC-PPPP-BB-22222222.jpg" name="RGB">
 
 ## Overview
 
