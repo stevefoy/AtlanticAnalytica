@@ -119,7 +119,7 @@ def process_csv_and_analyze_classes_with_probabilities( args):
             threshold = 20  # This would need to be defined based on the scale of your probabilities
         
             # Check if the max_probability is greater than or equal to threshold
-            if max_probability >= threshold and max_probability <90:
+            if max_probability >= threshold :
                 # Map class index to species ID and add to set, assuming cid_to_spid mapping exists
                 #species_id_set.add(int(cid_to_spid[int(class_index)]))
 
