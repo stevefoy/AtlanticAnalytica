@@ -799,6 +799,13 @@ def setupBBFiles():
             reader = csv.DictReader(file, delimiter=',')
             # Group rows by filename
             for row in reader:
+                for row in reader:
+                    for i in range(1, 6):  # Assuming up to 5 classes per crop
+                        #prob = float(row[f'probability_{i}'])
+                        spid_index = row[f'class_index_{i}']
+                        row[f'class_index_{i}']=int(spid_index)
+                        
+                    data_by_filename[row['filename']].append(row)
                 
                 data_by_filename[row['filename']].append(row)
                 #print(row)
@@ -866,8 +873,8 @@ def groupProcess(data_by_filename):
 
 
     # load the image files
-    file_path = "D:\\PlantCLEF2024\\PlantCLEF2024\\PlantCLEF2024test\\imagelist.txt"
-    image_full_path = "D:\\PlantCLEF2024\\PlantCLEF2024\\PlantCLEF2024test\\images\\"
+    file_path = r"D:\PlantCLEF2024\PlantCLEF2024\PlantCLEF2024test\imagelist.txt"
+    image_full_path = r"D:\PlantCLEF2024\PlantCLEF2024\PlantCLEF2024test\images"
 
     group = dict()
 
@@ -878,7 +885,7 @@ def groupProcess(data_by_filename):
     # Let find 30 unique classes in the plot
     max_classes_plot = 20
     
-    
+    base_directory_sam = r"D:\pretrained_models\segment-anything-main\SAM_Results"
     
     # SAVE DATA FOR HUGGINFACE PUSH
     output_hugginface =  r'D:\PlantCLEF2024\annotated\dinoV2_results_thresv16.csv'
@@ -897,6 +904,30 @@ def groupProcess(data_by_filename):
         
         for image_filename in filename_images_group:
             imagefile_data = data_by_filename[image_filename]
+            
+            image_masks_folder = os.path.join(base_directory_sam, image_filename)
+            mask_path = os.path.join(image_masks_folder, "maskRocks.png")
+            
+            file_mask_exists =  os.path.exists(mask_path)
+
+            if file_mask_exists == True:
+                #print("File here", mask_path )
+                img = Image.open(mask_path).convert('L')
+                threshold = 128
+                binary_mask = np.where(np.array(img) > threshold, 255, 0)
+                binary_mask_1or0 = np.where(np.array(img) > threshold, 1, 0)
+            
+                total_img_pixels = binary_mask_1or0.size
+                white_pixels = np.sum(binary_mask_1or0)
+                
+                percentage_white =int( (white_pixels / total_img_pixels) * 100)
+                
+                
+                if percentage_white > 80 :
+                    # SKIP Files have have MAsk issues
+                    file_mask_exists = False
+                    print("bad file:", mask_path )
+        
 
             # Print all data rows associated with the filename
             for row in imagefile_data:
@@ -908,8 +939,16 @@ def groupProcess(data_by_filename):
                     # Define the bounding box (x1, y1, x2, y2)
                     x1, y1, x2, y2 = (int(row[f'x1']), int(row[f'y1']), int(row[f'x2']), int(row[f'y2']))
                     #print(x1, y1, x2, y2)
-                
-                    if prob > min_threshold :
+                    
+                    # Extract the region of interest from the binary mask
+                    roi = binary_mask[y1:y2, x1:x2]
+                    
+                    # Calculate the percentage of pixels that are 255 in the ROI
+                    total_pixels = roi.size
+                    white_pixels = np.sum(roi == 255)
+                    percentage_white =int( (white_pixels / total_pixels) * 100)
+                    
+                    if prob > min_threshold and percentage_white < 60:
                         if prob > class_probabilities[class_index]['max_prob']:
                             class_probabilities[class_index]['max_prob'] = prob
                             # Nice to have BBox
@@ -919,6 +958,7 @@ def groupProcess(data_by_filename):
                         # Record a count anyway of the case
                         class_probabilities[class_index]['count'] += 1
                         class_probabilities[class_index]['avg_prob'] += prob
+                        
             # End record all data
             files_class_probabilities[image_filename] =   class_probabilities        
         # At group level sort highest classes
@@ -965,8 +1005,8 @@ def groupProcess(data_by_filename):
                     if class_index in sorted_class_indices and prob > HardThredProb:
                         result_classes.append(class_index)
                         
-        str_result = f"{image_filename};{list(result_classes)}\n"
-        file_out.write(str_result)
+        	str_result = f"{image_filename};{list(result_classes)}\n"
+        	file_out.write(str_result)
         
             
    
