@@ -89,7 +89,7 @@ def DEL_modeWeightCheck(args):
     #--------------------------------------------------------------------------------------
 
     # model = timm.create_model('vit_base_patch14_reg4_dinov2.lvd142m', pretrained=False, num_classes=len(cid_to_spid))
-    XT = "D:\\pretrained_models\\vit_base_patch14_reg4_dinov2_lvd142m_pc24_onlyclassifier\\model_best.pth.tar"
+    XT = r"D:\pretrained_models\vit_base_patch14_reg4_dinov2_lvd142m_pc24_onlyclassifier\model_best.pth.tar"
 
     model = timm.create_model('vit_base_patch14_reg4_dinov2.lvd142m', pretrained=False, num_classes=len(cid_to_spid), checkpoint_path=XT)
 
@@ -264,11 +264,24 @@ def create_mosaic(crops, nrow):
 
 # Limited speed up
 
+class ScaleDownByPercent(T.Resize):
+    def __init__(self, percent, interpolation=T.InterpolationMode.BILINEAR):
+        self.percent = percent
+        self.interpolation = interpolation
+
+    def __call__(self, img):
+        width, height = img.size
+        target_size = (int(width * self.percent), int(height * self.percent))
+        resize_transform = T.Resize(target_size, interpolation=self.interpolation)
+        return resize_transform(img)
     
-class loadImageDatasetOLD(Dataset):
+class loadImageDataset(Dataset):
     def __init__(self, image_files):
         self.image_files = image_files
-
+        self.transform = T.Compose([
+            ScaleDownByPercent(0.75),  # Scale down by 20%,
+            T.ToTensor(),
+            ])
 
     def __len__(self):
         return len(self.image_files)
@@ -278,11 +291,12 @@ class loadImageDatasetOLD(Dataset):
         image = Image.open(image_path).convert("RGB")
         if image.size == (0, 0):  # Check if image dimensions are zero
             raise ValueError(f"Image at file index {idx} is zero with path {image_path}")
+        
+        image_tensor = self.transform(image)
 
+        return image_tensor, image_path
 
-        return image, image_path
-
-class loadImageDataset(Dataset):
+class loadImageDatasetHSV(Dataset):
     def __init__(self, image_files):
         self.image_files = image_files
         self.transform = T.Compose([
@@ -381,8 +395,8 @@ class ImageCropDataset(Dataset):
         self.crops = crops
         self.crops_centre = crops_centre
         self.transform = T.Compose([
-            #T.Resize(size=518, interpolation=T.InterpolationMode.BICUBIC, max_size=None, antialias=True),
-            #T.CenterCrop(size=(518, 518)),
+            #T.Resize(size=518, interpolation=T.InterpolationMode.BILINEAR, max_size=None, antialias=True),
+            T.CenterCrop(size=(518, 518)),
             #T.ToTensor(),
             T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
@@ -533,71 +547,9 @@ def visualize_attention_map(img, attention_map, block_index, head_index):
 
     plt.close('all')  # Close the plot programmatically
 
-def visualize_attention_map_old(img, attention_map, block_index, head_index):
-    # Assuming img is a PyTorch tensor of shape (C, H, W)
-    # Convert to numpy and transpose to (H, W, C) for visualization
-    denormalized_image = (img.squeeze(0) * std) + mean 
-    
-    img_np = denormalized_image.permute(1, 2, 0).numpy()
-    #img_np = np.resize(img_np, (img_np.shape[0], img_np.shape[1]))
-    # denormalized_image = (img * std) + mean
-    
-    # Select attention map from a specific block and head
-    # Adjust indices as necessary
 
 
-    attention_map_softmax = torch.nn.functional.softmax(attention_map[block_index][head_index], dim=-1)
-    attention_weights = attention_map_softmax.cpu().numpy()
 
-
-    # Resize attention map to match img size (assuming square image for simplicity)
-    attn_map_resized = np.resize(attention_weights, (img_np.shape[0], img_np.shape[1]))
-    
-    # Overlay the attention map on the image
-
-    #plt.imshow(img_np)
-    #plt.imshow(attn_map_resized, cmap='jet', alpha=0.1)  # Adjust alpha for transparency
-    #plt.colorbar()
-    #plt.show()
-
-    # Assuming img_np is your original image and attn_map_resized is your attention map
-    fig, ax = plt.subplots(1, 2, figsize=(12, 6))  # Creates 2 subplots side by side
-
-    # Plot original image
-    ax[0].imshow(img_np)
-    ax[0].set_title('Original Image')
-    ax[0].axis('off')  # Hide axis for better visualization
-
-    # Plot image with attention overlay
-    #ax[1].imshow(img_np)  # First, show the original image
-    # Then, overlay the attention map
-    ax[1].imshow(attn_map_resized, cmap='jet', alpha=0.4)  # Adjust alpha to your liking
-    ax[1].set_title('Image with Attention Overlay')
-    ax[1].axis('off')  # Hide axis
-
-    # Optional: Add a colorbar to indicate the scale of the attention map
-    # Create an axes for colorbar. It's positioned [left, bottom, width, height] in the figure coordinate system
-    cax = fig.add_axes([ax[1].get_position().x1+0.01, ax[1].get_position().y0, 0.02, ax[1].get_position().height])
-    # Create colorbar
-    plt.colorbar(ax[1].images[-1], cax=cax, orientation='vertical')
-    plt.suptitle('Comparison of Original and Attention Overlay')  # Optional: Add a main title
-
-    plt.show()
-
-
-def visualize_attention_mapV2(attention_weights):
-    # Normalize attention weights for visualization
-    attention_weights = torch.nn.functional.softmax(attention_weights, dim=-1)
-    print(attention_weights.shape)
-    # Plot attention maps for each head
-    num_heads = attention_weights.size(1)
-    fig, axs = plt.subplots(1, num_heads, figsize=(20, 5))
-
-    for i in range(num_heads):
-        axs[i].imshow(attention_weights[0, i].detach().cpu().numpy(), cmap='hot', interpolation='nearest')
-        axs[i].set_title(f'Head {i+1}')
-
-    plt.show()
 
 # Visualize the attention maps
 #visualize_attention_map(attention_weights)
@@ -628,8 +580,8 @@ def main(args, DEBUG=True):
     image_full_path = r"C:\Users\stevf\OneDrive\Documents\datasets\test_set\images"
     
     # load the image files for clef annotation test
-    file_path = r"D:\PlantCLEF2024\annotated\imagelist.txt"
-    image_full_path = r"D:\PlantCLEF2024\annotated\images"
+   # file_path = r"D:\PlantCLEF2024\annotated\imagelist.txt"
+    #image_full_path = r"D:\PlantCLEF2024\annotated\images"
       
     from datetime import datetime
 
@@ -639,20 +591,20 @@ def main(args, DEBUG=True):
     # Convert to a very short string format, including 24-hour and minute (e.g., "202405061530" for May 6, 2024, 3:30 PM)
     short_date_time_string = now.strftime("%m%d%H%M")
     short_date_time_string = now.strftime("%m%d%H%M")
-    result_path = r"D:\PlantCLEF2024\annotated\Results"
+    result_path = r"D:\pretrained_models"
    
-    csv_file = "bb518_s112_R3_eql_T"+short_date_time_string+".csv"
+    csv_file = "bb800_s200_T"+short_date_time_string+".csv"
     csv_file = os.path.join(result_path, csv_file)
     
     image_files = []
     with open(file_path, 'r') as file:
     # Read all lines in the file and strip newline characters
-        image_files = [image_full_path+line.strip() for line in file]
+        image_files = [os.path.join(image_full_path,line.strip()) for line in file]
     
     # image_files = find_images(args.testfolder_path)
 
     dataset = loadImageDataset(image_files)
-    data_loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=8)
+    data_loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=8, pin_memory=True)
 
     # Setup torch 
     device = torch.device(args.device)
@@ -686,8 +638,8 @@ def main(args, DEBUG=True):
     # get model specific transforms (normalization, resize)
     data_config = timm.data.resolve_model_data_config(model)
     print(data_config)
-    transforms_trained = timm.data.create_transform(**data_config, is_training=False)
-    print("transforms_trained", transforms_trained)
+    #transforms_trained = timm.data.create_transform(**data_config, is_training=False)
+   # print("transforms_trained", transforms_trained)
 
 
 
@@ -702,7 +654,7 @@ def main(args, DEBUG=True):
     csv_headers = ["filename", "x1", "y1", "x2", "y2", "crop_index", "class_index_1", "probability_1", "class_index_2", "probability_2", "class_index_3", "probability_3", "class_index_4", "probability_4", "class_index_5", "probability_5"]
 
     # Open the CSV file for writing
-    file_out_prob = open(csv_file, mode='w', newline='')
+    file_out_prob = open(csv_file, mode='a', newline='')
     writer = csv.writer(file_out_prob)
     writer.writerow(csv_headers)  # Write the header
     
@@ -716,7 +668,7 @@ def main(args, DEBUG=True):
         # Example usage
         
         window_size =  int(518)  # The size of the window
-        step_size = int(50)    # How much the window slides each time. This could be less than window_size if you want overlapping windows
+        step_size = int(518//2)    # How much the window slides each time. This could be less than window_size if you want overlapping windows
         border_offset = 50  # Starting the window 100 pixels from the border
 
         # Assuming image_tensor is your loaded image as a tensor
@@ -724,7 +676,7 @@ def main(args, DEBUG=True):
         #crops, crop_name_data  = sliding_window_batchWH(img_tensor, file_nameCSV, window_size, step_size, border_offset)
         # dataset_crops = ImageCropDataset(crops, transforms_trained)
         dataset_crops = ImageCropDataset(crops,crop_name_data)
-        data_crop_loader = DataLoader(dataset_crops, batch_size=8, shuffle=False, num_workers=8)
+        data_crop_loader = DataLoader(dataset_crops, batch_size=10, shuffle=False, num_workers=8, pin_memory=True)
 
         species_id_set = set()
         species_id_max_proba = {} 
@@ -737,7 +689,7 @@ def main(args, DEBUG=True):
 
             #if green_percentage > 30 and grey_percentage < 25 and  brown_percentage < 10 : # if we have more 10 % in the patch then do classification
                 
-            imgs = crops.to(device)
+            imgs = crops.to(device, non_blocking=True) 
             
             #for rotation_transform in rotation_transforms:
             #    rotated_imgs = rotation_transform(imgs)  # Apply rotation and other transformations
