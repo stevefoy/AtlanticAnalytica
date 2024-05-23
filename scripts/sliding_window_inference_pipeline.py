@@ -20,6 +20,7 @@ from typing import List
 
 import os
 from torchsummary import summary
+import psutil
 
 # Workaround for duplicate OpenMP libraries
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
@@ -182,7 +183,7 @@ def sliding_window_batchV1(image_batch, window_size, step_size, border_offset):
 
     return batch_crops
 
-def sliding_window_batch(image_batch, window_size, step_size, border_offset):
+def sliding_window_batch(image_batch, file_nameCSV, window_size, step_size, border_offset):
     batch_crops = []
     crop_centers = []  # List to hold the center coordinates of each crop
 
@@ -196,10 +197,10 @@ def sliding_window_batch(image_batch, window_size, step_size, border_offset):
                 crop = image_tensor[:, y:y+window_size, x:x+window_size]
                 batch_crops.append(crop)
                 # Calculate the center coordinates of the current crop
-                center_x = x + window_size // 2
-                center_y = y + window_size // 2
+                #center_x = x + window_size // 2
+                #center_y = y + window_size // 2
                 
-                crop_centers.append([center_x, center_y])
+                crop_centers.append(file_nameCSV +","+ str(y)+","+str(y+window_size)+","+str(x)+","+str(x+window_size))
 
     return batch_crops, crop_centers
 
@@ -210,12 +211,68 @@ def create_mosaic(crops, nrow):
     grid_img = make_grid(crops, nrow=nrow)
     return grid_img
 
-class SpeciesImageDataset(Dataset):
-    def __init__(self, image_files):
-        self.image_files = image_files
+# Limited speed up
+class loadImageDataset_RAM_DRIVE(Dataset):
+    def __init__(self, image_files, mem_limit=0.6):
         self.transform = T.Compose([
             T.ToTensor(),  # Converts PIL.Image.Image to torch.FloatTensor
         ])
+        self.images = []
+        self.filenames = image_files
+        self.filenames_loaded = []
+        self.mem_limit = mem_limit
+        
+        # Preload images
+        #self._preload_images()
+        self._preload_images_respecting_memory_limit()
+
+    def _preload_images_respecting_memory_limit(self):
+        total_memory = psutil.virtual_memory().total
+        max_memory_usage = self.mem_limit * total_memory
+        current_memory_usage = 0
+        
+        image_counter = 0 
+        for img_path in self.filenames:
+            img = Image.open(img_path).convert('RGB')
+            
+            # Rough estimation of memory usage: width * height * channels * 8 bytes (for uint8)
+            # This is a simplification and might need adjustment.
+            img_memory = img.width * img.height * 3 * 8
+            
+            if current_memory_usage + img_memory > max_memory_usage:
+                break  # Stop loading more images if memory limit is reached
+            
+            if self.transform:
+                img = self.transform(img)
+            
+            self.images.append(img)
+            self.filenames_loaded.append(os.path.basename(img_path))
+            current_memory_usage += img_memory
+            image_counter +=1
+        print("MAX IMAGES loaded into memory ", str(self.mem_limit)," ", image_counter)
+
+    
+    def _preload_images(self):
+        for filename in self.filenames:
+            img = Image.open(filename).convert('RGB')
+            img = self.transform(img)
+            
+            self.images.append(img)
+    
+    def __len__(self):
+        return len(self.images)
+    
+    def __getitem__(self, idx):
+        # Return preloaded image and its filename
+        return self.images[idx], self.filenames_loaded[idx]
+    
+class loadImageDataset(Dataset):
+    def __init__(self, image_files):
+        self.image_files = image_files
+        self.transform= T.Compose([
+            T.ToTensor(),  # Converts PIL.Image.Image to torch.FloatTensor
+            #T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ]) 
 
     def __len__(self):
         return len(self.image_files)
@@ -236,8 +293,9 @@ class ImageCropDatasetGreen(Dataset):
         self.crops_centre = crops_centre
         self.transform = T.Compose([
             # T.ToTensor(), # Convert images to tensor before normalization
-            # T.Resize(size=518, interpolation=T.InterpolationMode.BICUBIC, max_size=None, antialias=True),
-            # T.CenterCrop(size=(518, 518)),
+            T.Resize(size=518, interpolation=T.InterpolationMode.BICUBIC, max_size=None, antialias=True),
+            T.CenterCrop(size=(518, 518)),
+            #T.ToTensor(),
             T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
@@ -326,6 +384,11 @@ class ImageCropDataset(Dataset):
         crop = self.crops[idx]
         x = self.transform(crop)
         return x
+
+
+
+
+
 
 # Example usage:
 # Assuming `crops` is a list of PIL Images or already transformed tensors
@@ -532,9 +595,27 @@ def main(args, DEBUG=True):
     cid_to_spid = load_class_mapping(args.class_mapping)
     print("classes", len(cid_to_spid))
     spid_to_sp = load_species_mapping(args.species_mapping)
-    image_files = find_images(args.testfolder_path)
+    
+    
+    # load the image files for clef full
+    file_path = "D:\\PlantCLEF2024\\PlantCLEF2024\\PlantCLEF2024test\\imagelist.txt"
+    image_full_path = "D:\\PlantCLEF2024\\PlantCLEF2024\\PlantCLEF2024test\\images\\"
+    
+    # load the image files for clef annotation test
+    file_path = "D:\\PlantCLEF2024\\annotated\\imagelist.txt"
+    image_full_path = "D:\\PlantCLEF2024\\annotated\\images\\"
+      
+    
+    
+    
+    image_files = []
+    with open(file_path, 'r') as file:
+    # Read all lines in the file and strip newline characters
+        image_files = [image_full_path+line.strip() for line in file]
+    
+    # image_files = find_images(args.testfolder_path)
 
-    dataset = SpeciesImageDataset(image_files)
+    dataset = loadImageDataset(image_files)
     data_loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=8)
 
     # Setup torch 
@@ -575,170 +656,75 @@ def main(args, DEBUG=True):
 
 
     print("plot_id;species_ids")
-    file_out = open("result.csv", 'w')
-    file_out_prob = open("result_prob.csv", mode='w')
+    
+    file_out = open("resultFinal.csv", 'w')
+
     
     
     file_out.write("plot_id;species_ids"+str('\n') )
-    file_out_prob.write("plot_id;species_ids"+str('\n') )
+
     counter = 0
+    
+    csv_file = "D:\\PlantCLEF2024\\annotated\\species_identifications.csv"
+    csv_headers = ["filename,x1,y1,x2,y2", "crop_index", "class_index_1", "probability_1", "class_index_2", "probability_2", "class_index_3", "probability_3", "class_index_4", "probability_4", "class_index_5", "probability_5"]
+
+    # Open the CSV file for writing
+    file_out_prob = open(csv_file, mode='a', newline='')
+    writer = csv.writer(file_out_prob)
+    writer.writerow(csv_headers)  # Write the header
     
     dynamic_threshold = 15
     for img_tensor, file_path in tqdm(data_loader): 
         # print("Found image file: ", file_path)
         file_name_with_extension = os.path.basename(file_path[0])
         file_name, _ = os.path.splitext(file_name_with_extension)
-
+        file_nameCSV = file_name.rstrip()
 
         # Example usage
         window_size =  int(518)  # The size of the window
-        step_size = int(518//3)    # How much the window slides each time. This could be less than window_size if you want overlapping windows
-        border_offset = 150  # Starting the window 100 pixels from the border
+        step_size = int(518//4)    # How much the window slides each time. This could be less than window_size if you want overlapping windows
+        border_offset = 50  # Starting the window 100 pixels from the border
 
         # Assuming image_tensor is your loaded image as a tensor
-        crops,crops_centre  = sliding_window_batch(img_tensor, window_size, step_size, border_offset)
+        crops, crop_name_data  = sliding_window_batch(img_tensor, file_nameCSV, window_size, step_size, border_offset)
 
         # dataset_crops = ImageCropDataset(crops, transforms_trained)
-        dataset_crops = ImageCropDatasetGreen(crops,crops_centre)
-        data_crop_loader = DataLoader(dataset_crops, batch_size=1, shuffle=False, num_workers=8)
+        dataset_crops = ImageCropDatasetGreen(crops,crop_name_data)
+        data_crop_loader = DataLoader(dataset_crops, batch_size=6, shuffle=False, num_workers=8)
 
         species_id_set = set()
         species_id_max_proba = {} 
         
         top_probabilities = []
         crops_annotated = []
-        for i, (crop, crop_cord, green_percentage, brown_percentage, grey_percentage) in enumerate(data_crop_loader):
+        crop_index = 0  # Initialize a separate crop index
+        for batch_idx, (crops, crop_cord_data, green_percentage, brown_percentage, grey_percentage) in enumerate(data_crop_loader):
             
             if True:
             #if green_percentage > 30 and grey_percentage < 25 and  brown_percentage < 10 : # if we have more 10 % in the patch then do classification
                 
-                img = crop.to(device)
-                # print(img.shape)
+                imgs = crops.to(device)
+                output = model(imgs)
                 
-                attention_maps.clear()
-                output = model(img)  # unsqueeze single image into batch of 1
-                
-                # visualize_attention_mapV2(attention_maps[0])
-    
+                top5_probabilities, top5_class_indices = torch.topk(output.softmax(dim=1) * 100, k=5, dim=1)
                 
                 
-                
-                
-                top5_probabilities, top5_class_indices = torch.topk(output.softmax(dim=1) * 100, k=5)
-                top5_probabilities = top5_probabilities.cpu().detach().numpy()
-                top5_class_indices = top5_class_indices.cpu().detach().numpy()
-                
-                max_proba = np.max(top5_probabilities)
-                data_packet = str(crop_cord[0].item()) + str(", ") + str(crop_cord[1].item()) + str(", ") + str(top5_probabilities.tolist()) 
-                data_packet += str(", ") + str(top5_class_indices.tolist())
-                
-    
-                 
-                annotation_text_list =[]
-                for proba, cid in zip(top5_probabilities[0], top5_class_indices[0]):
-                    species_id = cid_to_spid[cid]
-                    # print("species_id type", type(species_id))
-                    if proba > dynamic_threshold:
-                        
-    
-                        species_id_set.add(int(species_id))
-                        species = spid_to_sp[species_id]
-                        # print(species_id, species, proba)
-                        # Check if this species_id already has a recorded probability
-                        if species_id in species_id_max_proba:
-                            # If the current probability is higher, update it
-                            if proba > species_id_max_proba[species_id]:
-                                species_id_max_proba[species_id] = proba
-                        else:
-                            # If the species_id is not in the dictionary, add it
-                            species_id_max_proba[species_id] = proba
+                for i in range(imgs.size(0)):  # Iterate through each image in the batch
+                    probabilities = top5_probabilities[i].cpu().detach().numpy()
+                    class_indices = top5_class_indices[i].cpu().detach().numpy()
                     
-                    annotation_text = f"ID: {species_id}, P: {proba:.0f}%"
-                    annotation_text_list.append(annotation_text)
-                
-                annotation_text_list.append(str(green_percentage.numpy()))
-                annotation_text_list.append(str(brown_percentage.numpy()))
-                annotation_text_list.append(str(grey_percentage.numpy()))
+                    # Preparing the row to write, now including the filename
+                    row = [crop_cord_data[i], crop_index] + [item for pair in zip(class_indices, probabilities) for item in pair]
+                    writer.writerow(row)
+        
+                    crop_index += 1  # Increment the crop index for the next row
                     
-                if DEBUG == True:
-                    crop_annotated = annotate_crop( crop, annotation_text_list, device)
-                    crops_annotated.append(crop_annotated)
             else:
-                data_packet = str(crop_cord[0].item())+str(", ")+str(crop_cord[1].item())+str(", ")
+                pass
             
-            str_result_prob  = file_name.rstrip()+";"+str(i)+";"+data_packet+str("\n")
-            file_out_prob.write(str_result_prob)
-                
-                
-        
-        if DEBUG == True:
-            # visualize_attention_map(crop, attention_maps[0], 0, 0)
-            counter = counter+1
-            if len(crops_annotated) > 0:
-                if len(crops_annotated)>5:
-                    grid_img = make_grid(crops_annotated, nrow=5)  # Adjust `nrow` based on your preference
-                else:
-                    grid_img = make_grid(crops_annotated, nrow=1)
-    
-                # Convert grid to a PIL Image for saving
-                grid_img_pil = T.ToPILImage()(grid_img.cpu()).convert("RGB")
-    
-                # Save or display the mosaic image
-                mosaic_path = str('./crops_images/')+file_name+'mosaic_image.jpg'
-    
-                grid_img_pil.save(mosaic_path)
-            else:
-                print("error", file_name.rstrip())
-            # mosaic_image.show()
-        if counter > 40:
-            break
-        
-        #dynamic_threshold = np.percentile(top5_probabilities , 90)
 
 
-        str_result = file_name.rstrip()+";"+str(list(species_id_set))+str("")+str('\n') 
-        
-        #print(species_id_max_proba)
-        
-        #top_5 = np.sort(top_probabilities )[::-1][:5]
-
-
-        file_out.write(str_result)
-
-    file_out.close()
     file_out_prob.close()
-    print("dynamic threshold", dynamic_threshold)
-    
-    """  
-
-
-    img = None
-    if 'https://' in args.image or 'http://' in  args.image:
-        img = Image.open(urlopen(args.image))
-    elif args.image != None:
-        img = Image.open(args.image)
-        
-    if img != None:
-        img = transforms(img).unsqueeze(0)
-        img = img.to(device)
-        # print(img.shape)
-        output = model(img)  # unsqueeze single image into batch of 1
-        top5_probabilities, top5_class_indices = torch.topk(output.softmax(dim=1) * 100, k=5)
-        top5_probabilities = top5_probabilities.cpu().detach().numpy()
-        top5_class_indices = top5_class_indices.cpu().detach().numpy()
-
-        for proba, cid in zip(top5_probabilities[0], top5_class_indices[0]):
-            species_id = cid_to_spid[cid]
-            species = spid_to_sp[species_id]
-            print(species_id, species, proba)
-
-        species_data = SpeciesData()
-        species_data.add_entry("CBN-Pla-B1-20130724", [1395806])
-        species_data.add_entry("CBN-PdlC-A1-20130807", [1351284, 1494911, 1381367, 1396535, 1412857, 1295807])
-    
-    # Write to CSV file
-    species_data.write_csv("species_data.csv")
-    """ 
 
 
 if __name__ == '__main__':
@@ -752,7 +738,9 @@ if __name__ == '__main__':
 
     parser.add_argument("--device", type=str, default='cuda')
 
-    parser.add_argument("--testfolder_path", type=str, default='D:\\PlantCLEF2024\\PlantCLEF2024\\PlantCLEF2024test\\images\\' )
+    #parser.add_argument("--testfolder_path", type=str, default='D:\\PlantCLEF2024\\PlantCLEF2024\\PlantCLEF2024test\\images\\' )
+    
+    parser.add_argument("--testfolder_path", type=str, default='D:\\PlantCLEF2024\\annotated\\images\\' )
     
     args = parser.parse_args()
     
