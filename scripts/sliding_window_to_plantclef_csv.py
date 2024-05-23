@@ -10,13 +10,15 @@ import csv
 import numpy as np
 
 import csv
-
+import os
 
 import csv
 from collections import defaultdict
 import csv
 from collections import defaultdict
 import numpy as np
+from PIL import Image
+from tqdm import tqdm
 
 def process_csv_and_analyze_classes_with_probabilities( args):
     # Initialize a defaultdict to group rows by filename
@@ -27,6 +29,10 @@ def process_csv_and_analyze_classes_with_probabilities( args):
     
     data_by_filename = defaultdict(list)
     
+    # SAM 
+    base_directory_sam = r"D:\pretrained_models\segment-anything-main\SAM_Results"
+
+    
     # csv_file = "D:\\pretrained_models\\bb224_s112_R3_Test.csv"
     csv_file3 = "D:\\pretrained_models\\bb224_s112_R3_Test.csv"
     csv_file1 = 'D:\\pretrained_models\\ResultsAll_518W_172S_150B.csv'  
@@ -34,6 +40,7 @@ def process_csv_and_analyze_classes_with_probabilities( args):
     
     filetypes_class_index = [csv_file1, csv_file2 ]
     new_filetypes_class_index = [csv_file3]
+    new_filetypes_class_index = []
     
     thres98 = int(args.thres)
     
@@ -41,7 +48,7 @@ def process_csv_and_analyze_classes_with_probabilities( args):
     
     
     # SAVE DATA FOR HUGGINFACE PUSH
-    output_hugginface =  'D:\\PlantCLEF2024\\annotated\\dinoV2_results_thresv2.csv'
+    output_hugginface =  r'D:\PlantCLEF2024\annotated\dinoV2_results_thresv2.csv'
     file_out = open(output_hugginface, 'w')
     
     
@@ -61,7 +68,7 @@ def process_csv_and_analyze_classes_with_probabilities( args):
                     #prob = float(row[f'probability_{i}'])
                     class_index = row[f'class_index_{i}']
                     row[f'class_index_{i}']=int(cid_to_spid[int(class_index)])
- 
+                    
                 
                 data_by_filename[row['filename']].append(row)
                 #print(row)
@@ -82,49 +89,97 @@ def process_csv_and_analyze_classes_with_probabilities( args):
     highest_probabilities = defaultdict(lambda: defaultdict(float))       
              
     # Analysis for each filename
-    for filename, rows in data_by_filename.items():
+    for filename, rows in tqdm(data_by_filename.items()):
         # Use dictionaries to track unique class indices with their probabilities
         # This allows separate tracking for class_index_1 and class_index_2
         class_probabilities = defaultdict(list)
-        min_threshold =10
+        min_threshold =20
         max_classes = 12
+        
+        image_masks_folder = os.path.join(base_directory_sam, filename )
+        mask_path = os.path.join(image_masks_folder, "maskRocks.png")
+        
+        file_mask_exists =  os.path.exists(mask_path)
+        
+        if file_mask_exists == True:
+            #print("File here", mask_path )
+            img = Image.open(mask_path).convert('L')
+            threshold = 128
+            binary_mask = np.where(np.array(img) > threshold, 255, 0)
+            binary_mask_1or0 = np.where(np.array(img) > threshold, 1, 0)
+
+            total_img_pixels = binary_mask_1or0.size
+            white_pixels = np.sum(binary_mask_1or0)
+            
+            percentage_white =int( (white_pixels / total_img_pixels) * 100)
+            
+            
+            if percentage_white > 80:
+                # SKIP Files have have MAsk issues
+                file_mask_exists = False
+                print("bad file:", mask_path )
+            
+
+        else:
+            pass
+            #print("No file", mask_path )
     
         if filename not in highest_probabilities:
             highest_probabilities[filename] = defaultdict(float)    
-    
+        
         for row in rows:
-            for i in range(1, 6):  # Assuming up to 5 classes per crop
+            for i in range(1, 2):  # Assuming up to 5 classes per crop range(1, 6)
                 prob = float(row[f'probability_{i}'])
                 class_index = row[f'class_index_{i}']
+                
+                percentage_white = 0
+                if file_mask_exists:
+                    # Define the bounding box (x1, y1, x2, y2)
+                    x1, y1, x2, y2 = (int(row[f'x1']), int(row[f'y1']), int(row[f'x2']), int(row[f'y2']))  # Replace x1, y1, x2, y2 with actual values
+                    #print(x1, y1, x2, y2)
+                    # Extract the region of interest from the binary mask
+                    roi = binary_mask[y1:y2, x1:x2]
+                    
+                    # Calculate the percentage of pixels that are 255 in the ROI
+                    total_pixels = roi.size
+                    white_pixels = np.sum(roi == 255)
+                    percentage_white =int( (white_pixels / total_pixels) * 100)
+                    
+                    #print("Percentage of white pixels:", percentage_white)
 
-                if prob > min_threshold:
+                if prob > min_threshold and percentage_white < 60:
                     current_max_prob = class_probabilities.get(class_index, 0)
                     if prob > current_max_prob:
                         class_probabilities[class_index] = prob   
 
-    
+        max_classes = 8  # Define or adjust as necessary
         species_id_set = set()
 
-        #print(class_probabilities)
         sorted_class_indices = sorted(class_probabilities, key=lambda x: class_probabilities[x], reverse=True)[:max_classes]
-
-        #print(type(sorted_class_indices))
-    
-        #raise Exception('STOP!')
+        
+        threshold = 0.98  # Define a threshold for selecting classes, adjust as needed
+        
         for class_index in sorted_class_indices:
-            max_probability = class_probabilities[class_index]
+            probability = class_probabilities[class_index]
+        
+            # Add class index if the probability exceeds the threshold
+            if probability >= threshold:
+                species_id_set.add(int(class_index))
+            
+            
+            #max_probability = class_probabilities[class_index]
             
             # Decision point: Define a threshold to decide if this max_probability should lead to action
             # Example: Define a threshold (you might need to adjust based on your needs)
-            threshold = 20  # This would need to be defined based on the scale of your probabilities
+            #threshold = 20  # This would need to be defined based on the scale of your probabilities
         
             # Check if the max_probability is greater than or equal to threshold
-            if max_probability >= threshold :
+            #if max_probability >= threshold :
                 # Map class index to species ID and add to set, assuming cid_to_spid mapping exists
                 #species_id_set.add(int(cid_to_spid[int(class_index)]))
 
                     #New version Map class index to species ID and add to set
-                species_id_set.add(int(class_index))  
+                #species_id_set.add(int(class_index))  
 
     
         str_result = f"{filename.rstrip()};{list(species_id_set)}\n"
