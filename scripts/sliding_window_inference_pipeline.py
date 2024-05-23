@@ -21,6 +21,7 @@ from typing import List
 import os
 from torchsummary import summary
 import psutil
+import cv2
 
 # Workaround for duplicate OpenMP libraries
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
@@ -80,7 +81,7 @@ def check_weights_loaded(model, args):
             print(f"Warning: Parameter '{loaded_name}' unchanged. Check if this is expected.")
 
 
-def modeWeightCheck(args):
+def DEL_modeWeightCheck(args):
 
 
 
@@ -169,19 +170,7 @@ def sliding_window(image_tensor, window_size=518, step_size=518, border_offset=1
     return crops
 
 
-def sliding_window_batchV1(image_batch, window_size, step_size, border_offset):
-    batch_crops = []
-    for image_tensor in image_batch:
-        # Assuming image_tensor is [C, H, W]
-        C, H, W = image_tensor.shape
-    # Adjust start and end points for both x and y coordinates to account for the border offset
-    for y in range(border_offset, H - window_size - border_offset + 1, step_size):
-        for x in range(border_offset, W - window_size - border_offset + 1, step_size):
-            # Extract the crop
-            crop = image_tensor[:, y:y+window_size, x:x+window_size]
-            batch_crops.append(crop)
 
-    return batch_crops
 
 def sliding_window_batch(image_batch, file_nameCSV, window_size, step_size, border_offset):
     """
@@ -274,67 +263,12 @@ def create_mosaic(crops, nrow):
     return grid_img
 
 # Limited speed up
-class loadImageDataset_RAM_DRIVE(Dataset):
-    def __init__(self, image_files, mem_limit=0.6):
-        self.transform = T.Compose([
-            T.ToTensor(),  # Converts PIL.Image.Image to torch.FloatTensor
-        ])
-        self.images = []
-        self.filenames = image_files
-        self.filenames_loaded = []
-        self.mem_limit = mem_limit
-        
-        # Preload images
-        #self._preload_images()
-        self._preload_images_respecting_memory_limit()
-
-    def _preload_images_respecting_memory_limit(self):
-        total_memory = psutil.virtual_memory().total
-        max_memory_usage = self.mem_limit * total_memory
-        current_memory_usage = 0
-        
-        image_counter = 0 
-        for img_path in self.filenames:
-            img = Image.open(img_path).convert('RGB')
-            
-            # Rough estimation of memory usage: width * height * channels * 8 bytes (for uint8)
-            # This is a simplification and might need adjustment.
-            img_memory = img.width * img.height * 3 * 8
-            
-            if current_memory_usage + img_memory > max_memory_usage:
-                break  # Stop loading more images if memory limit is reached
-            
-            if self.transform:
-                img = self.transform(img)
-            
-            self.images.append(img)
-            self.filenames_loaded.append(os.path.basename(img_path))
-            current_memory_usage += img_memory
-            image_counter +=1
-        print("MAX IMAGES loaded into memory ", str(self.mem_limit)," ", image_counter)
 
     
-    def _preload_images(self):
-        for filename in self.filenames:
-            img = Image.open(filename).convert('RGB')
-            img = self.transform(img)
-            
-            self.images.append(img)
-    
-    def __len__(self):
-        return len(self.images)
-    
-    def __getitem__(self, idx):
-        # Return preloaded image and its filename
-        return self.images[idx], self.filenames_loaded[idx]
-    
-class loadImageDataset(Dataset):
+class loadImageDatasetOLD(Dataset):
     def __init__(self, image_files):
         self.image_files = image_files
-        self.transform= T.Compose([
-            T.ToTensor(),  # Converts PIL.Image.Image to torch.FloatTensor
-            #T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ]) 
+
 
     def __len__(self):
         return len(self.image_files)
@@ -343,12 +277,95 @@ class loadImageDataset(Dataset):
         image_path = self.image_files[idx]
         image = Image.open(image_path).convert("RGB")
         if image.size == (0, 0):  # Check if image dimensions are zero
-            raise ValueError(f"Image at index {index} is empty with path {image_path}")
-        image = self.transform(image)
+            raise ValueError(f"Image at file index {idx} is zero with path {image_path}")
+
 
         return image, image_path
 
-class ImageCropDatasetGreen(Dataset):
+class loadImageDatasetV2(Dataset):
+    def __init__(self, image_files):
+        self.image_files = image_files
+
+    def __len__(self):
+        return len(self.image_files)
+
+    def histogram_equalization(self, img):
+        # Convert PIL image to numpy array (RGB)
+        img_np = np.array(img)
+        
+        # Convert RGB to YCrCb
+        img_ycrcb = cv2.cvtColor(img_np, cv2.COLOR_RGB2YCrCb)
+        
+        # Equalize the histogram of the Y channel (luminance)
+        img_ycrcb[:,:,0] = cv2.equalizeHist(img_ycrcb[:,:,0])
+        
+        # Convert back to RGB
+        img_eq = cv2.cvtColor(img_ycrcb, cv2.COLOR_YCrCb2RGB)
+        
+        # Convert numpy array back to PIL Image
+        img_eq_pil = Image.fromarray(img_eq)
+        
+        return img_eq_pil
+
+    def __getitem__(self, idx):
+        image_path = self.image_files[idx]
+        image = Image.open(image_path).convert("RGB")
+        if image.size == (0, 0):  # Check if image dimensions are zero
+            raise ValueError(f"Image at file index {idx} is zero with path {image_path}")
+
+        # Apply histogram equalization to the image
+        image_eq = self.histogram_equalization(image)
+
+        return image_eq, image_path
+
+class loadImageDataset(Dataset):
+    def __init__(self, image_files):
+        self.image_files = image_files
+        self.to_tensor = T.ToTensor()
+        self.to_pil = T.ToPILImage()
+
+    def __len__(self):
+        return len(self.image_files)
+
+    def histogram_equalization(self, img_tensor):
+        img_flat = img_tensor.flatten()
+        bins = 256
+
+        # Calculate histogram
+        hist = torch.histc(img_flat, bins=bins, min=0, max=1)
+
+        # Calculate CDF
+        cdf = hist.cumsum(0)
+        cdf_min = cdf[cdf > 0].min()
+        cdf_max = cdf[-1]
+
+        # Normalize the CDF
+        cdf_normalized = (cdf - cdf_min) / (cdf_max - cdf_min) * 255
+
+        # Map the old pixel values to the new ones based on the equalized histogram
+        indices = (img_flat * (bins-1)).long()
+        img_eq = cdf_normalized[indices]
+
+        # Reshape back to the original shape
+        return img_eq.reshape(img_tensor.shape)
+
+    def __getitem__(self, idx):
+        image_path = self.image_files[idx]
+        image = Image.open(image_path).convert("RGB")
+        if image.size == (0, 0):  # Check if image dimensions are zero
+            raise ValueError(f"Image at file index {idx} is zero with path {image_path}")
+
+        image_tensor = self.to_tensor(image)
+
+        # Apply histogram equalization to each channel separately
+        equalized_channels = [self.histogram_equalization(channel) for channel in image_tensor]
+        image_tensor_eq = torch.stack(equalized_channels)
+
+        return image_tensor_eq, image_path
+
+
+
+class ImageCropDataset(Dataset):
     def __init__(self, crops, crops_centre):
         """
         crops: List of image crops (as PIL Images or paths to images)
@@ -356,9 +373,8 @@ class ImageCropDatasetGreen(Dataset):
         self.crops = crops
         self.crops_centre = crops_centre
         self.transform = T.Compose([
-            # T.ToTensor(), # Convert images to tensor before normalization
-            T.Resize(size=518, interpolation=T.InterpolationMode.BICUBIC, max_size=None, antialias=True),
-            T.CenterCrop(size=(518, 518)),
+            #T.Resize(size=518, interpolation=T.InterpolationMode.BICUBIC, max_size=None, antialias=True),
+            #T.CenterCrop(size=(518, 518)),
             #T.ToTensor(),
             T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
@@ -369,88 +385,12 @@ class ImageCropDatasetGreen(Dataset):
     def __getitem__(self, idx):
         crop = self.crops[idx]
         centre = self.crops_centre[idx]
-        """
-        # Convert tensor to PIL Image in RGB
-        img_pil_rgb = to_pil_image(crop)
-        
-        # Convert PIL Image from RGB to HSV
-        img_pil_hsv = img_pil_rgb.convert('HSV')
-        
-        
-        np_hsv_crop = np.array(img_pil_hsv)
 
-
-        # Define your green range in HSV
-        #lower_green = np.array([35, 100, 100])
-        #upper_green = np.array([75, 255, 255])
-        
-        lower_green = np.array([30, 50, 50])  # loking at gimp more yellow-greens and less saturated greens
-        upper_green = np.array([85, 255, 255]) # Extend to bluish-greens and very bright greens
-
-        # Mask to detect green areas
-        green_mask = np.all(np_hsv_crop >= lower_green, axis=-1) & np.all(np_hsv_crop <= upper_green, axis=-1)
-        green_percentage = int(np.mean(green_mask) * 100)
-
-
-        lower_brown = np.array([10, 50, 50])
-        upper_brown = np.array([30, 150, 150])
-        
-        
-        # Mask to detect green areas
-        brown_mask = np.all(np_hsv_crop >= lower_brown, axis=-1) & np.all(np_hsv_crop <= upper_brown, axis=-1)
-        brown_percentage = int(np.mean(brown_mask) * 100)
-
-
-        lower_brown = np.array([10, 50, 50])
-        upper_brown = np.array([30, 150, 150])
-        
-        
-        # Mask to detect green areas
-        brown_mask = np.all(np_hsv_crop >= lower_brown, axis=-1) & np.all(np_hsv_crop <= upper_brown, axis=-1)
-        brown_percentage = int(np.mean(brown_mask) * 100)
-        
-        
-        lower_grey = np.array([0, 0, 50])  # Assuming a bit of leeway for 'dark greys'
-        upper_grey = np.array([180, 50, 200])  # Broad hue range, low saturation, moderate-high value
-
-        # Mask to detect green areas
-        grey_mask = np.all(np_hsv_crop >= lower_grey, axis=-1) & np.all(np_hsv_crop <= upper_grey, axis=-1)
-        grey_percentage = int(np.mean(grey_mask) * 100)
-        
-        """
-        green_percentage = 0
-        brown_percentage = 0
-        grey_percentage  = 0
         # Apply transforms to the original RGB crop
         x = self.transform(crop)
         
         # Assuming you want to return the green percentage along with the image tensor
-        return x, centre, green_percentage, brown_percentage, grey_percentage
-
-class ImageCropDataset(Dataset):
-    def __init__(self, crops, transforms):
-        """
-        crops: List of image crops (as PIL Images or tensors)
-        """
-        self.crops = crops
-        self.transform = T.Compose([
-            # Resize only if we need to slow
-            # T.Resize((518, 518)),
-            T.Normalize(mean=[0.4850, 0.4560, 0.4060], std=[0.2290, 0.2240, 0.2250])
-        ])
-
-    def __len__(self):
-        return len(self.crops)
-
-
-
-    def __getitem__(self, idx):
-        crop = self.crops[idx]
-        x = self.transform(crop)
-        return x
-
-
-
+        return x, centre
 
 
 
@@ -740,7 +680,8 @@ def main(args, DEBUG=True):
 
     counter = 0
     
-    csv_file = "D:\\pretrained_models\\bb224_s112_R3_Test.csv"
+
+    csv_file = r"D:\pretrained_models\bb518_s112_R3_eql_HSV.csv"
     csv_headers = ["filename", "x1", "y1", "x2", "y2", "crop_index", "class_index_1", "probability_1", "class_index_2", "probability_2", "class_index_3", "probability_3", "class_index_4", "probability_4", "class_index_5", "probability_5"]
 
     # Open the CSV file for writing
@@ -757,15 +698,15 @@ def main(args, DEBUG=True):
 
         # Example usage
         
-        window_size =  int(224)  # The size of the window
-        step_size = int(112)    # How much the window slides each time. This could be less than window_size if you want overlapping windows
+        window_size =  int(518)  # The size of the window
+        step_size = int(172)    # How much the window slides each time. This could be less than window_size if you want overlapping windows
         border_offset = 50  # Starting the window 100 pixels from the border
 
         # Assuming image_tensor is your loaded image as a tensor
         crops, crop_name_data  = sliding_window_batch(img_tensor, file_nameCSV, window_size, step_size, border_offset)
         #crops, crop_name_data  = sliding_window_batchWH(img_tensor, file_nameCSV, window_size, step_size, border_offset)
         # dataset_crops = ImageCropDataset(crops, transforms_trained)
-        dataset_crops = ImageCropDatasetGreen(crops,crop_name_data)
+        dataset_crops = ImageCropDataset(crops,crop_name_data)
         data_crop_loader = DataLoader(dataset_crops, batch_size=8, shuffle=False, num_workers=8)
 
         species_id_set = set()
@@ -774,39 +715,38 @@ def main(args, DEBUG=True):
         top_probabilities = []
         crops_annotated = []
         crop_index = 0  # Initialize a separate crop index
-        for batch_idx, (crops, crop_coord_data, green_percentage, brown_percentage, grey_percentage) in enumerate(data_crop_loader):
+        for batch_idx, (crops, crop_coord_data) in enumerate(data_crop_loader):
             
-            if True:
+
             #if green_percentage > 30 and grey_percentage < 25 and  brown_percentage < 10 : # if we have more 10 % in the patch then do classification
                 
-                imgs = crops.to(device)
-                
-                for rotation_transform in rotation_transforms:
-                    rotated_imgs = rotation_transform(imgs)  # Apply rotation and other transformations
-                    output = model(rotated_imgs)
-                
-                    
-                    top5_probabilities, top5_class_indices = torch.topk(output.softmax(dim=1) * 100, k=5, dim=1)
-                    
-                    
-                    for i in range(imgs.size(0)):  # Iterate through each image in the batch
-                        probabilities = top5_probabilities[i].cpu().detach().numpy()
-                        class_indices = top5_class_indices[i].cpu().detach().numpy()
-                        
-                        # Parse coordinates and file name
-                        fn, x, y, x2, y2 = crop_coord_data[i].split(",")
-                        # Assuming cid_to_spid maps class indices to species IDs
-                        species_ids = [cid_to_spid.get(ci, "Unknown") for ci in class_indices]
-                        
-                        # Preparing the row to write, now including the filename
-                        row = [fn, x, y, x2, y2, crop_index] + \
-                              [item for pair in zip(species_ids, probabilities) for item in pair]
-                        writer.writerow(row)
+            imgs = crops.to(device)
             
-                        crop_index += 1  # Increment the crop index for the next row
+            #for rotation_transform in rotation_transforms:
+            #    rotated_imgs = rotation_transform(imgs)  # Apply rotation and other transformations
+            output = model(imgs)
+            
+                
+            top5_probabilities, top5_class_indices = torch.topk(output.softmax(dim=1) * 100, k=5, dim=1)
+            
+            
+            for i in range(imgs.size(0)):  # Iterate through each image in the batch
+                probabilities = top5_probabilities[i].cpu().detach().numpy()
+                class_indices = top5_class_indices[i].cpu().detach().numpy()
+                
+                # Parse coordinates and file name
+                fn, x, y, x2, y2 = crop_coord_data[i].split(",")
+                # Assuming cid_to_spid maps class indices to species IDs
+                species_ids = [cid_to_spid.get(ci, "Unknown") for ci in class_indices]
+                
+                # Preparing the row to write, now including the filename
+                row = [fn, x, y, x2, y2, crop_index] + \
+                      [item for pair in zip(species_ids, probabilities) for item in pair]
+                writer.writerow(row)
+    
+                crop_index += 1  # Increment the crop index for the next row
                         
-                else:
-                    pass
+
             
 
 
