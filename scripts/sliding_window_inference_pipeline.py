@@ -202,15 +202,13 @@ def sliding_window_batch(image_batch, file_nameCSV, window_size, step_size, bord
     crop_coordinates = []
 
     for image_tensor in image_batch:
-        C, H, W = image_tensor.shape  # Image dimensions: channels, height, width
-        # Calculate the valid range for the start of the crops
-        start_range = border_offset
-        end_range = H - window_size - border_offset + 1
-
-        # Generate crops and compute their metadata
-        for y in range(start_range, end_range, step_size):
-            for x in range(start_range, end_range, step_size):
-                crop = image_tensor[:, y:y + window_size, x:x + window_size]
+        # Assuming image_tensor is [C, H, W]
+        C, H, W = image_tensor.shape
+        # Adjust start and end points for both x and y coordinates to account for the border offset
+        for y in range(border_offset, H - window_size - border_offset + 1, step_size):
+            for x in range(border_offset, W - window_size - border_offset + 1, step_size):
+                # Extract the crop
+                crop = image_tensor[:, y:y+window_size, x:x+window_size]
                 batch_crops.append(crop)
 
                 # Generate the filename and coordinates string
@@ -344,6 +342,8 @@ class loadImageDataset(Dataset):
     def __getitem__(self, idx):
         image_path = self.image_files[idx]
         image = Image.open(image_path).convert("RGB")
+        if image.size == (0, 0):  # Check if image dimensions are zero
+            raise ValueError(f"Image at index {index} is empty with path {image_path}")
         image = self.transform(image)
 
         return image, image_path
@@ -654,6 +654,20 @@ def visualize_attention_mapV2(attention_weights):
 # Visualize the attention maps
 #visualize_attention_map(attention_weights)
 
+rotation_transforms = [
+    T.Compose([
+        T.RandomRotation([0, 0]),  # No rotation
+    ]),
+    T.Compose([
+        T.RandomRotation([90, 90]),  # 90 degrees
+    ]),
+    T.Compose([
+        T.RandomRotation([180, 180]),  # 180 degrees
+    ])
+]
+
+
+
 def main(args, DEBUG=True):
     
     cid_to_spid = load_class_mapping(args.class_mapping)
@@ -662,12 +676,13 @@ def main(args, DEBUG=True):
     
     
     # load the image files for clef full
-    file_path = "D:\\PlantCLEF2024\\PlantCLEF2024\\PlantCLEF2024test\\imagelist.txt"
-    image_full_path = "D:\\PlantCLEF2024\\PlantCLEF2024\\PlantCLEF2024test\\images\\"
+    file_path = "C:\\Users\\stevf\\OneDrive\\Documents\\datasets\\test_set\\imagelist.txt"
+    image_full_path = "C:\\Users\\stevf\\OneDrive\\Documents\\datasets\\test_set\\images\\"
     
     # load the image files for clef annotation test
-    #file_path = "D:\\PlantCLEF2024\\annotated\\imagelist.txt"
-    #image_full_path = "D:\\PlantCLEF2024\\annotated\\images\\"
+   # file_path = "D:\\PlantCLEF2024\\annotated\\imagelist.txt"
+
+   # image_full_path = "D:\\PlantCLEF2024\\annotated\\images\\"
       
     
     
@@ -721,15 +736,11 @@ def main(args, DEBUG=True):
 
     print("plot_id;species_ids")
     
-    file_out = open("resultFinal.csv", 'w')
 
-    
-    
-    file_out.write("plot_id;species_ids"+str('\n') )
 
     counter = 0
     
-    csv_file = "D:\\PlantCLEF2024\\annotated\\species_identifications.csv"
+    csv_file = "D:\\pretrained_models\\bb224_s112_R3_Test.csv"
     csv_headers = ["filename", "x1", "y1", "x2", "y2", "crop_index", "class_index_1", "probability_1", "class_index_2", "probability_2", "class_index_3", "probability_3", "class_index_4", "probability_4", "class_index_5", "probability_5"]
 
     # Open the CSV file for writing
@@ -746,8 +757,8 @@ def main(args, DEBUG=True):
 
         # Example usage
         
-        window_size =  int(518//2)  # The size of the window
-        step_size = int(518/6)    # How much the window slides each time. This could be less than window_size if you want overlapping windows
+        window_size =  int(224)  # The size of the window
+        step_size = int(112)    # How much the window slides each time. This could be less than window_size if you want overlapping windows
         border_offset = 50  # Starting the window 100 pixels from the border
 
         # Assuming image_tensor is your loaded image as a tensor
@@ -755,7 +766,7 @@ def main(args, DEBUG=True):
         #crops, crop_name_data  = sliding_window_batchWH(img_tensor, file_nameCSV, window_size, step_size, border_offset)
         # dataset_crops = ImageCropDataset(crops, transforms_trained)
         dataset_crops = ImageCropDatasetGreen(crops,crop_name_data)
-        data_crop_loader = DataLoader(dataset_crops, batch_size=6, shuffle=False, num_workers=8)
+        data_crop_loader = DataLoader(dataset_crops, batch_size=8, shuffle=False, num_workers=8)
 
         species_id_set = set()
         species_id_max_proba = {} 
@@ -769,29 +780,33 @@ def main(args, DEBUG=True):
             #if green_percentage > 30 and grey_percentage < 25 and  brown_percentage < 10 : # if we have more 10 % in the patch then do classification
                 
                 imgs = crops.to(device)
-                output = model(imgs)
                 
-                top5_probabilities, top5_class_indices = torch.topk(output.softmax(dim=1) * 100, k=5, dim=1)
+                for rotation_transform in rotation_transforms:
+                    rotated_imgs = rotation_transform(imgs)  # Apply rotation and other transformations
+                    output = model(rotated_imgs)
                 
-                
-                for i in range(imgs.size(0)):  # Iterate through each image in the batch
-                    probabilities = top5_probabilities[i].cpu().detach().numpy()
-                    class_indices = top5_class_indices[i].cpu().detach().numpy()
                     
-                    # Parse coordinates and file name
-                    fn, x, y, x2, y2 = crop_coord_data[i].split(",")
-                    # Assuming cid_to_spid maps class indices to species IDs
-                    species_ids = [cid_to_spid.get(ci, "Unknown") for ci in class_indices]
+                    top5_probabilities, top5_class_indices = torch.topk(output.softmax(dim=1) * 100, k=5, dim=1)
                     
-                    # Preparing the row to write, now including the filename
-                    row = [fn, x, y, x2, y2, crop_index] + \
-                          [item for pair in zip(species_ids, probabilities) for item in pair]
-                    writer.writerow(row)
-        
-                    crop_index += 1  # Increment the crop index for the next row
                     
-            else:
-                pass
+                    for i in range(imgs.size(0)):  # Iterate through each image in the batch
+                        probabilities = top5_probabilities[i].cpu().detach().numpy()
+                        class_indices = top5_class_indices[i].cpu().detach().numpy()
+                        
+                        # Parse coordinates and file name
+                        fn, x, y, x2, y2 = crop_coord_data[i].split(",")
+                        # Assuming cid_to_spid maps class indices to species IDs
+                        species_ids = [cid_to_spid.get(ci, "Unknown") for ci in class_indices]
+                        
+                        # Preparing the row to write, now including the filename
+                        row = [fn, x, y, x2, y2, crop_index] + \
+                              [item for pair in zip(species_ids, probabilities) for item in pair]
+                        writer.writerow(row)
+            
+                        crop_index += 1  # Increment the crop index for the next row
+                        
+                else:
+                    pass
             
 
 
@@ -805,13 +820,13 @@ if __name__ == '__main__':
     parser.add_argument("--class_mapping", type=str, default='class_mapping.txt')
     parser.add_argument("--species_mapping", type=str, default='species_id_to_name.txt')
     
-   # parser.add_argument("--pretrained_path", type=str, default='./vit_base_patch14_reg4_dinov2_lvd142m_pc24_onlyclassifier_then_all/model_best.pth.tar')
-    parser.add_argument("--pretrained_path", type=str, default='./vit_base_patch14_reg4_dinov2_lvd142m_pc24_onlyclassifier/model_best.pth.tar')
+    parser.add_argument("--pretrained_path", type=str, default='./vit_base_patch14_reg4_dinov2_lvd142m_pc24_onlyclassifier_then_all/model_best.pth.tar')
+    # parser.add_argument("--pretrained_path", type=str, default='./vit_base_patch14_reg4_dinov2_lvd142m_pc24_onlyclassifier/model_best.pth.tar')
     
     parser.add_argument("--device", type=str, default='cuda')
 
-    parser.add_argument("--testfolder_path", type=str, default='D:\\PlantCLEF2024\\PlantCLEF2024\\PlantCLEF2024test\\images\\' )
-   # parser.add_argument("--testfolder_path", type=str, default='D:\\PlantCLEF2024\\annotated\\images\\' )
+   # parser.add_argument("--testfolder_path", type=str, default='D:\\PlantCLEF2024\\PlantCLEF2024\\PlantCLEF2024test\\images\\' )
+    parser.add_argument("--testfolder_path", type=str, default='D:\\PlantCLEF2024\\annotated\\images\\' )
     
     args = parser.parse_args()
     
