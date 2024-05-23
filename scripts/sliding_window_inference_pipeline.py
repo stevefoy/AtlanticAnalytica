@@ -184,25 +184,89 @@ def sliding_window_batchV1(image_batch, window_size, step_size, border_offset):
     return batch_crops
 
 def sliding_window_batch(image_batch, file_nameCSV, window_size, step_size, border_offset):
+    """
+    Generates image crops using a sliding window approach along with their coordinates.
+
+    Parameters:
+    - image_batch: a batch of images in tensor format [N, C, H, W]
+    - file_nameCSV: the base file name for output
+    - window_size: the size of each window crop
+    - step_size: the step size for the sliding window
+    - border_offset: offset from the image border to start cropping
+
+    Returns:
+    - batch_crops: a list of crops from the image batch
+    - crop_coordinates: a list of strings with filename and crop coordinates
+    """
     batch_crops = []
-    crop_centers = []  # List to hold the center coordinates of each crop
+    crop_coordinates = []
 
     for image_tensor in image_batch:
-        # Assuming image_tensor is [C, H, W]
-        C, H, W = image_tensor.shape
-        # Adjust start and end points for both x and y coordinates to account for the border offset
-        for y in range(border_offset, H - window_size - border_offset + 1, step_size):
-            for x in range(border_offset, W - window_size - border_offset + 1, step_size):
-                # Extract the crop
-                crop = image_tensor[:, y:y+window_size, x:x+window_size]
-                batch_crops.append(crop)
-                # Calculate the center coordinates of the current crop
-                #center_x = x + window_size // 2
-                #center_y = y + window_size // 2
-                
-                crop_centers.append(file_nameCSV +","+ str(y)+","+str(y+window_size)+","+str(x)+","+str(x+window_size))
+        C, H, W = image_tensor.shape  # Image dimensions: channels, height, width
+        # Calculate the valid range for the start of the crops
+        start_range = border_offset
+        end_range = H - window_size - border_offset + 1
 
-    return batch_crops, crop_centers
+        # Generate crops and compute their metadata
+        for y in range(start_range, end_range, step_size):
+            for x in range(start_range, end_range, step_size):
+                crop = image_tensor[:, y:y + window_size, x:x + window_size]
+                batch_crops.append(crop)
+
+                # Generate the filename and coordinates string
+                # This string includes the filename and the x, y coordinates for the top-left and bottom-right corners of the crop
+                coordinates = f"{file_nameCSV},{y},{y + window_size},{x},{x + window_size}"
+                crop_coordinates.append(coordinates)
+
+    return batch_crops, crop_coordinates
+
+def sliding_window_batchWH(image_batch, file_nameCSV, window_height, window_width, step_size, border_offset):
+    """
+    Generates image crops using a sliding window approach along with their coordinates,
+    allowing for different window heights and widths.
+
+    Parameters:
+    - image_batch: a batch of images in tensor format [N, C, H, W]
+    - file_nameCSV: the base file name for output
+    - window_height: the height of each window crop
+    - window_width: the width of each window crop
+    - step_size: the step size for the sliding window
+    - border_offset: offset from the image border to start cropping
+
+    Returns:
+    - batch_crops: a list of crops from the image batch
+    - crop_coordinates: a list of strings with filename and crop coordinates
+    """
+    if window_height <= 0 or window_width <= 0 or step_size <= 0:
+        raise ValueError("window_height, window_width, and step_size must be positive integers")
+    
+    batch_crops = []
+    crop_coordinates = []
+
+    for idx, image_tensor in enumerate(image_batch):
+        C, H, W = image_tensor.shape  # Image dimensions: channels, height, width
+        # Ensure the window fits within the image dimensions adjusted by the border offset
+        if H < window_height + 2 * border_offset or W < window_width + 2 * border_offset:
+            continue
+
+        start_range_h = border_offset
+        end_range_h = H - window_height - border_offset + 1
+
+        start_range_w = border_offset
+        end_range_w = W - window_width - border_offset + 1
+
+        for y in range(start_range_h, end_range_h, step_size):
+            for x in range(start_range_w, end_range_w, step_size):
+                crop = image_tensor[:, y:y + window_height, x:x + window_width]
+                batch_crops.append(crop)
+
+                # Include the image index and exact coordinates in the filename
+                coordinates = f"{file_nameCSV}_img{idx}_{y}_{y + window_height}_{x}_{x + window_width}"
+                crop_coordinates.append(coordinates)
+
+    return batch_crops, crop_coordinates
+
+
 
 # Function to create a mosaic image from crops
 def create_mosaic(crops, nrow):
@@ -602,8 +666,8 @@ def main(args, DEBUG=True):
     image_full_path = "D:\\PlantCLEF2024\\PlantCLEF2024\\PlantCLEF2024test\\images\\"
     
     # load the image files for clef annotation test
-    file_path = "D:\\PlantCLEF2024\\annotated\\imagelist.txt"
-    image_full_path = "D:\\PlantCLEF2024\\annotated\\images\\"
+    #file_path = "D:\\PlantCLEF2024\\annotated\\imagelist.txt"
+    #image_full_path = "D:\\PlantCLEF2024\\annotated\\images\\"
       
     
     
@@ -666,7 +730,7 @@ def main(args, DEBUG=True):
     counter = 0
     
     csv_file = "D:\\PlantCLEF2024\\annotated\\species_identifications.csv"
-    csv_headers = ["filename,x1,y1,x2,y2", "crop_index", "class_index_1", "probability_1", "class_index_2", "probability_2", "class_index_3", "probability_3", "class_index_4", "probability_4", "class_index_5", "probability_5"]
+    csv_headers = ["filename", "x1", "y1", "x2", "y2", "crop_index", "class_index_1", "probability_1", "class_index_2", "probability_2", "class_index_3", "probability_3", "class_index_4", "probability_4", "class_index_5", "probability_5"]
 
     # Open the CSV file for writing
     file_out_prob = open(csv_file, mode='a', newline='')
@@ -681,13 +745,14 @@ def main(args, DEBUG=True):
         file_nameCSV = file_name.rstrip()
 
         # Example usage
-        window_size =  int(518)  # The size of the window
-        step_size = int(518//4)    # How much the window slides each time. This could be less than window_size if you want overlapping windows
+        
+        window_size =  int(518//2)  # The size of the window
+        step_size = int(518/6)    # How much the window slides each time. This could be less than window_size if you want overlapping windows
         border_offset = 50  # Starting the window 100 pixels from the border
 
         # Assuming image_tensor is your loaded image as a tensor
         crops, crop_name_data  = sliding_window_batch(img_tensor, file_nameCSV, window_size, step_size, border_offset)
-
+        #crops, crop_name_data  = sliding_window_batchWH(img_tensor, file_nameCSV, window_size, step_size, border_offset)
         # dataset_crops = ImageCropDataset(crops, transforms_trained)
         dataset_crops = ImageCropDatasetGreen(crops,crop_name_data)
         data_crop_loader = DataLoader(dataset_crops, batch_size=6, shuffle=False, num_workers=8)
@@ -698,7 +763,7 @@ def main(args, DEBUG=True):
         top_probabilities = []
         crops_annotated = []
         crop_index = 0  # Initialize a separate crop index
-        for batch_idx, (crops, crop_cord_data, green_percentage, brown_percentage, grey_percentage) in enumerate(data_crop_loader):
+        for batch_idx, (crops, crop_coord_data, green_percentage, brown_percentage, grey_percentage) in enumerate(data_crop_loader):
             
             if True:
             #if green_percentage > 30 and grey_percentage < 25 and  brown_percentage < 10 : # if we have more 10 % in the patch then do classification
@@ -713,8 +778,14 @@ def main(args, DEBUG=True):
                     probabilities = top5_probabilities[i].cpu().detach().numpy()
                     class_indices = top5_class_indices[i].cpu().detach().numpy()
                     
+                    # Parse coordinates and file name
+                    fn, x, y, x2, y2 = crop_coord_data[i].split(",")
+                    # Assuming cid_to_spid maps class indices to species IDs
+                    species_ids = [cid_to_spid.get(ci, "Unknown") for ci in class_indices]
+                    
                     # Preparing the row to write, now including the filename
-                    row = [crop_cord_data[i], crop_index] + [item for pair in zip(class_indices, probabilities) for item in pair]
+                    row = [fn, x, y, x2, y2, crop_index] + \
+                          [item for pair in zip(species_ids, probabilities) for item in pair]
                     writer.writerow(row)
         
                     crop_index += 1  # Increment the crop index for the next row
@@ -734,13 +805,13 @@ if __name__ == '__main__':
     parser.add_argument("--class_mapping", type=str, default='class_mapping.txt')
     parser.add_argument("--species_mapping", type=str, default='species_id_to_name.txt')
     
-    parser.add_argument("--pretrained_path", type=str, default='./vit_base_patch14_reg4_dinov2_lvd142m_pc24_onlyclassifier_then_all/model_best.pth.tar')
-
+   # parser.add_argument("--pretrained_path", type=str, default='./vit_base_patch14_reg4_dinov2_lvd142m_pc24_onlyclassifier_then_all/model_best.pth.tar')
+    parser.add_argument("--pretrained_path", type=str, default='./vit_base_patch14_reg4_dinov2_lvd142m_pc24_onlyclassifier/model_best.pth.tar')
+    
     parser.add_argument("--device", type=str, default='cuda')
 
-    #parser.add_argument("--testfolder_path", type=str, default='D:\\PlantCLEF2024\\PlantCLEF2024\\PlantCLEF2024test\\images\\' )
-    
-    parser.add_argument("--testfolder_path", type=str, default='D:\\PlantCLEF2024\\annotated\\images\\' )
+    parser.add_argument("--testfolder_path", type=str, default='D:\\PlantCLEF2024\\PlantCLEF2024\\PlantCLEF2024test\\images\\' )
+   # parser.add_argument("--testfolder_path", type=str, default='D:\\PlantCLEF2024\\annotated\\images\\' )
     
     args = parser.parse_args()
     
