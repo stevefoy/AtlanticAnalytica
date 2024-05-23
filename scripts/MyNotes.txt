@@ -1,0 +1,568 @@
+### 
+ def visualize_attention_map2(img, attention_map, block_index, head_index):
+    # Assuming img is a PyTorch tensor of shape (C, H, W)
+    # Convert to numpy and transpose to (H, W, C) for visualization
+        # Convert tensor to PIL Image
+    crop = img.squeeze(0)  # Remove batch dimension
+
+    # Denormalize image
+    #mean = np.array(mean).reshape(-1, 1, 1)  # Adjust shape for broadcasting
+    #std = np.array(std).reshape(-1, 1, 1)
+    denormalized_image = (crop * std) + mean
+
+    # Convert to PIL for visualization
+    img_pil = T.ToPILImage()(denormalized_image).convert("RGB")
+
+    # Convert PIL Image to Numpy array for plotting
+    img_np = np.array(img_pil)
+
+    # Assuming 'attention_map' is your attention weights with shape [num_heads, seq_len, seq_len]
+    # and 'block_index' and 'head_index' specify the block and head of interest
+    attn_map = attention_map[block_index][head_index].cpu().numpy()
+
+    # Assuming the first dimension includes a class token, remove it and resize
+    attn_map = attn_map[1:, 1:]  # Adjust based on your model specifics
+    # Properly resize attention map to match image dimensions
+    attn_map_resized = scipy.ndimage.zoom(attn_map, (img_np.shape[0] / attn_map.shape[0], img_np.shape[1] / attn_map.shape[1]), order=1)
+
+    # Overlay the attention map on the image
+    plt.imshow(img_np)
+    plt.imshow(attn_map_resized, cmap='jet', alpha=0.5)  # Adjust alpha for transparency
+    plt.colorbar()
+    plt.show()
+###
+Parameter snapshots before loading:
+head.weight: tensor([ 0.0853, -0.1351,  0.0422, -0.0507, -0.0793])...
+head.bias: tensor([0.1992, 0.5086, 0.6085, 0.4070, 0.6837])...
+ cls_token
+ reg_token
+ pos_embed
+ patch_embed.proj.weight
+ patch_embed.proj.bias
+ blocks.0.norm1.weight
+ blocks.0.norm1.bias
+ blocks.0.attn.qkv.weight
+ blocks.0.attn.qkv.bias
+ blocks.0.attn.proj.weight
+ blocks.0.attn.proj.bias
+ blocks.0.ls1.gamma
+ blocks.0.norm2.weight
+ blocks.0.norm2.bias
+ blocks.0.mlp.fc1.weight
+ blocks.0.mlp.fc1.bias
+ blocks.0.mlp.fc2.weight
+ blocks.0.mlp.fc2.bias
+ blocks.0.ls2.gamma
+ blocks.1.norm1.weight
+ blocks.1.norm1.bias
+ blocks.1.attn.qkv.weight
+ blocks.1.attn.qkv.bias
+ blocks.1.attn.proj.weight
+ blocks.1.attn.proj.bias
+ blocks.1.ls1.gamma
+ blocks.1.norm2.weight
+ blocks.1.norm2.bias
+ blocks.1.mlp.fc1.weight
+ blocks.1.mlp.fc1.bias
+ blocks.1.mlp.fc2.weight
+ blocks.1.mlp.fc2.bias
+ blocks.1.ls2.gamma
+ blocks.2.norm1.weight
+ blocks.2.norm1.bias
+ blocks.2.attn.qkv.weight
+ blocks.2.attn.qkv.bias
+ blocks.2.attn.proj.weight
+ blocks.2.attn.proj.bias
+ blocks.2.ls1.gamma
+ blocks.2.norm2.weight
+ blocks.2.norm2.bias
+ blocks.2.mlp.fc1.weight
+ blocks.2.mlp.fc1.bias
+ blocks.2.mlp.fc2.weight
+ blocks.2.mlp.fc2.bias
+ blocks.2.ls2.gamma
+ blocks.3.norm1.weight
+ blocks.3.norm1.bias
+ blocks.3.attn.qkv.weight
+ blocks.3.attn.qkv.bias
+ blocks.3.attn.proj.weight
+ blocks.3.attn.proj.bias
+ blocks.3.ls1.gamma
+ blocks.3.norm2.weight
+ blocks.3.norm2.bias
+ blocks.3.mlp.fc1.weight
+ blocks.3.mlp.fc1.bias
+ blocks.3.mlp.fc2.weight
+ blocks.3.mlp.fc2.bias
+ blocks.3.ls2.gamma
+ blocks.4.norm1.weight
+ blocks.4.norm1.bias
+ blocks.4.attn.qkv.weight
+ blocks.4.attn.qkv.bias
+ blocks.4.attn.proj.weight
+ blocks.4.attn.proj.bias
+ blocks.4.ls1.gamma
+ blocks.4.norm2.weight
+ blocks.4.norm2.bias
+ blocks.4.mlp.fc1.weight
+ blocks.4.mlp.fc1.bias
+ blocks.4.mlp.fc2.weight
+ blocks.4.mlp.fc2.bias
+ blocks.4.ls2.gamma
+ blocks.5.norm1.weight
+ blocks.5.norm1.bias
+ blocks.5.attn.qkv.weight
+ blocks.5.attn.qkv.bias
+ blocks.5.attn.proj.weight
+ blocks.5.attn.proj.bias
+ blocks.5.ls1.gamma
+ blocks.5.norm2.weight
+ blocks.5.norm2.bias
+ blocks.5.mlp.fc1.weight
+ blocks.5.mlp.fc1.bias
+ blocks.5.mlp.fc2.weight
+ blocks.5.mlp.fc2.bias
+ blocks.5.ls2.gamma
+ blocks.6.norm1.weight
+ blocks.6.norm1.bias
+ blocks.6.attn.qkv.weight
+ blocks.6.attn.qkv.bias
+ blocks.6.attn.proj.weight
+ blocks.6.attn.proj.bias
+ blocks.6.ls1.gamma
+ blocks.6.norm2.weight
+ blocks.6.norm2.bias
+ blocks.6.mlp.fc1.weight
+ blocks.6.mlp.fc1.bias
+ blocks.6.mlp.fc2.weight
+ blocks.6.mlp.fc2.bias
+ blocks.6.ls2.gamma
+ blocks.7.norm1.weight
+ blocks.7.norm1.bias
+ blocks.7.attn.qkv.weight
+ blocks.7.attn.qkv.bias
+ blocks.7.attn.proj.weight
+ blocks.7.attn.proj.bias
+ blocks.7.ls1.gamma
+ blocks.7.norm2.weight
+ blocks.7.norm2.bias
+ blocks.7.mlp.fc1.weight
+ blocks.7.mlp.fc1.bias
+ blocks.7.mlp.fc2.weight
+ blocks.7.mlp.fc2.bias
+ blocks.7.ls2.gamma
+ blocks.8.norm1.weight
+ blocks.8.norm1.bias
+ blocks.8.attn.qkv.weight
+ blocks.8.attn.qkv.bias
+ blocks.8.attn.proj.weight
+ blocks.8.attn.proj.bias
+ blocks.8.ls1.gamma
+ blocks.8.norm2.weight
+ blocks.8.norm2.bias
+ blocks.8.mlp.fc1.weight
+ blocks.8.mlp.fc1.bias
+ blocks.8.mlp.fc2.weight
+ blocks.8.mlp.fc2.bias
+ blocks.8.ls2.gamma
+ blocks.9.norm1.weight
+ blocks.9.norm1.bias
+ blocks.9.attn.qkv.weight
+ blocks.9.attn.qkv.bias
+ blocks.9.attn.proj.weight
+ blocks.9.attn.proj.bias
+ blocks.9.ls1.gamma
+ blocks.9.norm2.weight
+ blocks.9.norm2.bias
+ blocks.9.mlp.fc1.weight
+ blocks.9.mlp.fc1.bias
+ blocks.9.mlp.fc2.weight
+ blocks.9.mlp.fc2.bias
+ blocks.9.ls2.gamma
+ blocks.10.norm1.weight
+ blocks.10.norm1.bias
+ blocks.10.attn.qkv.weight
+ blocks.10.attn.qkv.bias
+ blocks.10.attn.proj.weight
+ blocks.10.attn.proj.bias
+ blocks.10.ls1.gamma
+ blocks.10.norm2.weight
+ blocks.10.norm2.bias
+ blocks.10.mlp.fc1.weight
+ blocks.10.mlp.fc1.bias
+ blocks.10.mlp.fc2.weight
+ blocks.10.mlp.fc2.bias
+ blocks.10.ls2.gamma
+ blocks.11.norm1.weight
+ blocks.11.norm1.bias
+ blocks.11.attn.qkv.weight
+ blocks.11.attn.qkv.bias
+ blocks.11.attn.proj.weight
+ blocks.11.attn.proj.bias
+ blocks.11.ls1.gamma
+ blocks.11.norm2.weight
+ blocks.11.norm2.bias
+ blocks.11.mlp.fc1.weight
+ blocks.11.mlp.fc1.bias
+ blocks.11.mlp.fc2.weight
+ blocks.11.mlp.fc2.bias
+ blocks.11.ls2.gamma
+ norm.weight
+ norm.bias
+ head.weight
+ head.bias
+
+
+
+
+
+
+
+
+classes 7806
+C:\Users\stevf\anaconda3\envs\clef2024\lib\site-packages\timm\models\vision_transformer.py:91: UserWarning: 1Torch was not compiled with flash attention. (Triggered internally at C:\cb\pytorch_1000000000000\work\aten\src\ATen\native\transformers\cuda\sdp_utils.cpp:263.)
+  x = F.scaled_dot_product_attention(
+----------------------------------------------------------------
+        Layer (type)               Output Shape         Param #
+================================================================
+            Conv2d-1          [-1, 768, 37, 37]         452,352
+          Identity-2            [-1, 1369, 768]               0
+        PatchEmbed-3            [-1, 1369, 768]               0
+           Dropout-4            [-1, 1374, 768]               0
+          Identity-5            [-1, 1374, 768]               0
+          Identity-6            [-1, 1374, 768]               0
+         LayerNorm-7            [-1, 1374, 768]           1,536
+            Linear-8           [-1, 1374, 2304]       1,771,776
+          Identity-9         [-1, 12, 1374, 64]               0
+         Identity-10         [-1, 12, 1374, 64]               0
+           Linear-11            [-1, 1374, 768]         590,592
+          Dropout-12            [-1, 1374, 768]               0
+        Attention-13            [-1, 1374, 768]               0
+       LayerScale-14            [-1, 1374, 768]               0
+         Identity-15            [-1, 1374, 768]               0
+        LayerNorm-16            [-1, 1374, 768]           1,536
+           Linear-17           [-1, 1374, 3072]       2,362,368
+             GELU-18           [-1, 1374, 3072]               0
+          Dropout-19           [-1, 1374, 3072]               0
+         Identity-20           [-1, 1374, 3072]               0
+           Linear-21            [-1, 1374, 768]       2,360,064
+          Dropout-22            [-1, 1374, 768]               0
+              Mlp-23            [-1, 1374, 768]               0
+       LayerScale-24            [-1, 1374, 768]               0
+         Identity-25            [-1, 1374, 768]               0
+            Block-26            [-1, 1374, 768]               0
+        LayerNorm-27            [-1, 1374, 768]           1,536
+           Linear-28           [-1, 1374, 2304]       1,771,776
+         Identity-29         [-1, 12, 1374, 64]               0
+         Identity-30         [-1, 12, 1374, 64]               0
+           Linear-31            [-1, 1374, 768]         590,592
+          Dropout-32            [-1, 1374, 768]               0
+        Attention-33            [-1, 1374, 768]               0
+       LayerScale-34            [-1, 1374, 768]               0
+         Identity-35            [-1, 1374, 768]               0
+        LayerNorm-36            [-1, 1374, 768]           1,536
+           Linear-37           [-1, 1374, 3072]       2,362,368
+             GELU-38           [-1, 1374, 3072]               0
+          Dropout-39           [-1, 1374, 3072]               0
+         Identity-40           [-1, 1374, 3072]               0
+           Linear-41            [-1, 1374, 768]       2,360,064
+          Dropout-42            [-1, 1374, 768]               0
+              Mlp-43            [-1, 1374, 768]               0
+       LayerScale-44            [-1, 1374, 768]               0
+         Identity-45            [-1, 1374, 768]               0
+            Block-46            [-1, 1374, 768]               0
+        LayerNorm-47            [-1, 1374, 768]           1,536
+           Linear-48           [-1, 1374, 2304]       1,771,776
+         Identity-49         [-1, 12, 1374, 64]               0
+         Identity-50         [-1, 12, 1374, 64]               0
+           Linear-51            [-1, 1374, 768]         590,592
+          Dropout-52            [-1, 1374, 768]               0
+        Attention-53            [-1, 1374, 768]               0
+       LayerScale-54            [-1, 1374, 768]               0
+         Identity-55            [-1, 1374, 768]               0
+        LayerNorm-56            [-1, 1374, 768]           1,536
+           Linear-57           [-1, 1374, 3072]       2,362,368
+             GELU-58           [-1, 1374, 3072]               0
+          Dropout-59           [-1, 1374, 3072]               0
+         Identity-60           [-1, 1374, 3072]               0
+           Linear-61            [-1, 1374, 768]       2,360,064
+          Dropout-62            [-1, 1374, 768]               0
+              Mlp-63            [-1, 1374, 768]               0
+       LayerScale-64            [-1, 1374, 768]               0
+         Identity-65            [-1, 1374, 768]               0
+            Block-66            [-1, 1374, 768]               0
+        LayerNorm-67            [-1, 1374, 768]           1,536
+           Linear-68           [-1, 1374, 2304]       1,771,776
+         Identity-69         [-1, 12, 1374, 64]               0
+         Identity-70         [-1, 12, 1374, 64]               0
+           Linear-71            [-1, 1374, 768]         590,592
+          Dropout-72            [-1, 1374, 768]               0
+        Attention-73            [-1, 1374, 768]               0
+       LayerScale-74            [-1, 1374, 768]               0
+         Identity-75            [-1, 1374, 768]               0
+        LayerNorm-76            [-1, 1374, 768]           1,536
+           Linear-77           [-1, 1374, 3072]       2,362,368
+             GELU-78           [-1, 1374, 3072]               0
+          Dropout-79           [-1, 1374, 3072]               0
+         Identity-80           [-1, 1374, 3072]               0
+           Linear-81            [-1, 1374, 768]       2,360,064
+          Dropout-82            [-1, 1374, 768]               0
+              Mlp-83            [-1, 1374, 768]               0
+       LayerScale-84            [-1, 1374, 768]               0
+         Identity-85            [-1, 1374, 768]               0
+            Block-86            [-1, 1374, 768]               0
+        LayerNorm-87            [-1, 1374, 768]           1,536
+           Linear-88           [-1, 1374, 2304]       1,771,776
+         Identity-89         [-1, 12, 1374, 64]               0
+         Identity-90         [-1, 12, 1374, 64]               0
+           Linear-91            [-1, 1374, 768]         590,592
+          Dropout-92            [-1, 1374, 768]               0
+        Attention-93            [-1, 1374, 768]               0
+       LayerScale-94            [-1, 1374, 768]               0
+         Identity-95            [-1, 1374, 768]               0
+        LayerNorm-96            [-1, 1374, 768]           1,536
+           Linear-97           [-1, 1374, 3072]       2,362,368
+             GELU-98           [-1, 1374, 3072]               0
+          Dropout-99           [-1, 1374, 3072]               0
+        Identity-100           [-1, 1374, 3072]               0
+          Linear-101            [-1, 1374, 768]       2,360,064
+         Dropout-102            [-1, 1374, 768]               0
+             Mlp-103            [-1, 1374, 768]               0
+      LayerScale-104            [-1, 1374, 768]               0
+        Identity-105            [-1, 1374, 768]               0
+           Block-106            [-1, 1374, 768]               0
+       LayerNorm-107            [-1, 1374, 768]           1,536
+          Linear-108           [-1, 1374, 2304]       1,771,776
+        Identity-109         [-1, 12, 1374, 64]               0
+        Identity-110         [-1, 12, 1374, 64]               0
+          Linear-111            [-1, 1374, 768]         590,592
+         Dropout-112            [-1, 1374, 768]               0
+       Attention-113            [-1, 1374, 768]               0
+      LayerScale-114            [-1, 1374, 768]               0
+        Identity-115            [-1, 1374, 768]               0
+       LayerNorm-116            [-1, 1374, 768]           1,536
+          Linear-117           [-1, 1374, 3072]       2,362,368
+            GELU-118           [-1, 1374, 3072]               0
+         Dropout-119           [-1, 1374, 3072]               0
+        Identity-120           [-1, 1374, 3072]               0
+          Linear-121            [-1, 1374, 768]       2,360,064
+         Dropout-122            [-1, 1374, 768]               0
+             Mlp-123            [-1, 1374, 768]               0
+      LayerScale-124            [-1, 1374, 768]               0
+        Identity-125            [-1, 1374, 768]               0
+           Block-126            [-1, 1374, 768]               0
+       LayerNorm-127            [-1, 1374, 768]           1,536
+          Linear-128           [-1, 1374, 2304]       1,771,776
+        Identity-129         [-1, 12, 1374, 64]               0
+        Identity-130         [-1, 12, 1374, 64]               0
+          Linear-131            [-1, 1374, 768]         590,592
+         Dropout-132            [-1, 1374, 768]               0
+       Attention-133            [-1, 1374, 768]               0
+      LayerScale-134            [-1, 1374, 768]               0
+        Identity-135            [-1, 1374, 768]               0
+       LayerNorm-136            [-1, 1374, 768]           1,536
+          Linear-137           [-1, 1374, 3072]       2,362,368
+            GELU-138           [-1, 1374, 3072]               0
+         Dropout-139           [-1, 1374, 3072]               0
+        Identity-140           [-1, 1374, 3072]               0
+          Linear-141            [-1, 1374, 768]       2,360,064
+         Dropout-142            [-1, 1374, 768]               0
+             Mlp-143            [-1, 1374, 768]               0
+      LayerScale-144            [-1, 1374, 768]               0
+        Identity-145            [-1, 1374, 768]               0
+           Block-146            [-1, 1374, 768]               0
+       LayerNorm-147            [-1, 1374, 768]           1,536
+          Linear-148           [-1, 1374, 2304]       1,771,776
+        Identity-149         [-1, 12, 1374, 64]               0
+        Identity-150         [-1, 12, 1374, 64]               0
+          Linear-151            [-1, 1374, 768]         590,592
+         Dropout-152            [-1, 1374, 768]               0
+       Attention-153            [-1, 1374, 768]               0
+      LayerScale-154            [-1, 1374, 768]               0
+        Identity-155            [-1, 1374, 768]               0
+       LayerNorm-156            [-1, 1374, 768]           1,536
+          Linear-157           [-1, 1374, 3072]       2,362,368
+            GELU-158           [-1, 1374, 3072]               0
+         Dropout-159           [-1, 1374, 3072]               0
+        Identity-160           [-1, 1374, 3072]               0
+          Linear-161            [-1, 1374, 768]       2,360,064
+         Dropout-162            [-1, 1374, 768]               0
+             Mlp-163            [-1, 1374, 768]               0
+      LayerScale-164            [-1, 1374, 768]               0
+        Identity-165            [-1, 1374, 768]               0
+           Block-166            [-1, 1374, 768]               0
+       LayerNorm-167            [-1, 1374, 768]           1,536
+          Linear-168           [-1, 1374, 2304]       1,771,776
+        Identity-169         [-1, 12, 1374, 64]               0
+        Identity-170         [-1, 12, 1374, 64]               0
+          Linear-171            [-1, 1374, 768]         590,592
+         Dropout-172            [-1, 1374, 768]               0
+       Attention-173            [-1, 1374, 768]               0
+      LayerScale-174            [-1, 1374, 768]               0
+        Identity-175            [-1, 1374, 768]               0
+       LayerNorm-176            [-1, 1374, 768]           1,536
+          Linear-177           [-1, 1374, 3072]       2,362,368
+            GELU-178           [-1, 1374, 3072]               0
+         Dropout-179           [-1, 1374, 3072]               0
+        Identity-180           [-1, 1374, 3072]               0
+          Linear-181            [-1, 1374, 768]       2,360,064
+         Dropout-182            [-1, 1374, 768]               0
+             Mlp-183            [-1, 1374, 768]               0
+      LayerScale-184            [-1, 1374, 768]               0
+        Identity-185            [-1, 1374, 768]               0
+           Block-186            [-1, 1374, 768]               0
+       LayerNorm-187            [-1, 1374, 768]           1,536
+          Linear-188           [-1, 1374, 2304]       1,771,776
+        Identity-189         [-1, 12, 1374, 64]               0
+        Identity-190         [-1, 12, 1374, 64]               0
+          Linear-191            [-1, 1374, 768]         590,592
+         Dropout-192            [-1, 1374, 768]               0
+       Attention-193            [-1, 1374, 768]               0
+      LayerScale-194            [-1, 1374, 768]               0
+        Identity-195            [-1, 1374, 768]               0
+       LayerNorm-196            [-1, 1374, 768]           1,536
+          Linear-197           [-1, 1374, 3072]       2,362,368
+            GELU-198           [-1, 1374, 3072]               0
+         Dropout-199           [-1, 1374, 3072]               0
+        Identity-200           [-1, 1374, 3072]               0
+          Linear-201            [-1, 1374, 768]       2,360,064
+         Dropout-202            [-1, 1374, 768]               0
+             Mlp-203            [-1, 1374, 768]               0
+      LayerScale-204            [-1, 1374, 768]               0
+        Identity-205            [-1, 1374, 768]               0
+           Block-206            [-1, 1374, 768]               0
+       LayerNorm-207            [-1, 1374, 768]           1,536
+          Linear-208           [-1, 1374, 2304]       1,771,776
+        Identity-209         [-1, 12, 1374, 64]               0
+        Identity-210         [-1, 12, 1374, 64]               0
+          Linear-211            [-1, 1374, 768]         590,592
+         Dropout-212            [-1, 1374, 768]               0
+       Attention-213            [-1, 1374, 768]               0
+      LayerScale-214            [-1, 1374, 768]               0
+        Identity-215            [-1, 1374, 768]               0
+       LayerNorm-216            [-1, 1374, 768]           1,536
+          Linear-217           [-1, 1374, 3072]       2,362,368
+            GELU-218           [-1, 1374, 3072]               0
+         Dropout-219           [-1, 1374, 3072]               0
+        Identity-220           [-1, 1374, 3072]               0
+          Linear-221            [-1, 1374, 768]       2,360,064
+         Dropout-222            [-1, 1374, 768]               0
+             Mlp-223            [-1, 1374, 768]               0
+      LayerScale-224            [-1, 1374, 768]               0
+        Identity-225            [-1, 1374, 768]               0
+           Block-226            [-1, 1374, 768]               0
+       LayerNorm-227            [-1, 1374, 768]           1,536
+          Linear-228           [-1, 1374, 2304]       1,771,776
+        Identity-229         [-1, 12, 1374, 64]               0
+        Identity-230         [-1, 12, 1374, 64]               0
+          Linear-231            [-1, 1374, 768]         590,592
+         Dropout-232            [-1, 1374, 768]               0
+       Attention-233            [-1, 1374, 768]               0
+      LayerScale-234            [-1, 1374, 768]               0
+        Identity-235            [-1, 1374, 768]               0
+       LayerNorm-236            [-1, 1374, 768]           1,536
+          Linear-237           [-1, 1374, 3072]       2,362,368
+            GELU-238           [-1, 1374, 3072]               0
+         Dropout-239           [-1, 1374, 3072]               0
+        Identity-240           [-1, 1374, 3072]               0
+          Linear-241            [-1, 1374, 768]       2,360,064
+         Dropout-242            [-1, 1374, 768]               0
+             Mlp-243            [-1, 1374, 768]               0
+      LayerScale-244            [-1, 1374, 768]               0
+        Identity-245            [-1, 1374, 768]               0
+           Block-246            [-1, 1374, 768]               0
+       LayerNorm-247            [-1, 1374, 768]           1,536
+        Identity-248                  [-1, 768]               0
+         Dropout-249                  [-1, 768]               0
+          Linear-250                 [-1, 7806]       6,002,814
+
+
+
+    import requests
+    from io import BytesIO
+    
+    patch_size = 14
+
+    response = requests.get("https://dl.fbaipublicfiles.com/dino/img.png")
+    img0 = Image.open(BytesIO(response.content))
+    img0 = img0.convert('RGB')
+    
+    plt.imshow(img0)
+    print(type(img0))
+    print(np.array(img0).shape)
+
+    transform = T.Compose([
+        T.Resize((518, 518)),
+        T.ToTensor(),
+        T.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+    ])
+    img = transform(img0)
+    print("img.shape", img.shape)
+
+    # make the image divisible by the patch size
+    w, h = img.shape[1] - img.shape[1] % patch_size, img.shape[2] - img.shape[2] % patch_size
+    img = img[:, :w, :h].unsqueeze(0)
+
+    w_featmap = img.shape[-2] // patch_size
+    h_featmap = img.shape[-1] // patch_size
+    print(w_featmap," ", h_featmap, " ",  w," ", h )
+	
+	
+	
+	
+"1363475";"Lolium perenne L." Perrienial Rye grass
+
+ Kentucky bluegrass is Poa pratensis
+ 
+ 
+"Poa" is the genus name for a group of grasses that are commonly known as bluegrass or meadow grass. The word "Poa" itself is derived from Greek, where it means "fodder," reflecting the grass's use as feed for grazing animals. This genus includes several species, the most famous of which might be Poa pratensis, known as Kentucky bluegrass, widely used for turf and lawns. Poa species are characterized by their preference for cooler climates and are found in temperate regions across the globe.
+
+
+
+
+
+The PlanClef 2024 competition is addressing a highly pertinent issue in ecological research by focusing on the automation of vegetation plot inventory analysis through advanced AI techniques. The motivation for integrating AI in this context is compelling, especially considering the meticulous and often labor-intensive process currently required to identify and quantify species in vegetation plots. The potential for AI to enhance the efficiency of ecological studies and conservation efforts is significant.
+
+The task you've described involves a challenging shift from training AI models on single-label images (each image depicting one plant species) to applying these models to multi-label classification tasks where multiple plant species are present in each plot image. This shift poses substantial difficulties because the models must not only accurately recognise multiple species in a single frame but also handle variations in scale, occlusion, and inter-species visual similarity.
+
+One of the critical aspects to consider in approaching this task is the selection and development of appropriate machine learning models that are robust to these challenges. Convolutional Neural Networks (CNNs) are a staple in image recognition and could be adapted for multi-label classification by incorporating architectures that are sensitive to the spatial distribution of features within an image, potentially using attention mechanisms or spatial transformers.
+
+Moreover, since the training data consists of single-label images, techniques such as transfer learning could be pivotal. Here, a model trained on the abundant single-species dataset might have its higher-level feature-detecting layers transferred and fine-tuned on the scarcer multi-species plot data. This approach would leverage the detailed species recognition capabilities learned from the extensive single-label dataset, adapting it to the complexity of multi-species recognition.
+
+Additionally, data augmentation techniques like synthetic image generation, where images of single species are combined into composite images mimicking natural plots, might be explored to enrich training datasets. This could help in bridging the gap between the single-species images and the multi-species plot images.
+
+Finally, collaboration platforms like iNaturalist, PlantNet, and GBIF could play a crucial role in augmenting the available data and providing a real-world application framework for the developed models. They offer a rich source of tagged images that could potentially enhance model training and provide a pathway for practical implementation of the AI solutions developed in the competition.
+
+Addressing the challenge posed by PlanClef 2024 not only advances ecological data analysis but also contributes to broader biodiversity conservation efforts, making it a highly impactful and innovative endeavour in the field of environmental AI.
+
+
+In the context of the PlanClef 2024 competition, the example result you've described offers a practical glimpse into the real-world application of AI for botanical studies. Each species listed—Cardamine resedifolia L., Festuca airoides Lam., Pilosella breviscapa (DC.) Soják, Lotus alpinus (Ser.) Schleich. ex Ramond, Poa alpina L., Saxifraga moschata Wulfen, Scorzoneroides pyrenaica (Gouan) Holub, and Thymus nervosus J.Gay ex Willk—represents unique challenges and characteristics for identification.
+
+These species vary in terms of their visual features such as color, texture, shape, and size, which are critical for accurate classification. AI models designed to recognize these species in a vegetative plot need to be particularly adept at handling such diversity. This necessitates training on a wide variety of images that capture these species from different angles, in varying lighting conditions, and in different stages of growth.
+
+For the AI challenge, the task would involve correctly identifying and classifying all these species within the confines of a 0.5x0.5 meter plot from high-resolution images. The complexity increases as these species may not be isolated but intermixed with each other, potentially overlapping or being partially obscured, which mimics the natural growth conditions found in wild settings.
+
+Given the variations in individual plant appearances and the environmental conditions under which they are photographed, the following approaches could be especially beneficial:
+
+Fine-Tuning and Transfer Learning: Models pre-trained on general botanical images could be fine-tuned with a specific focus on the species of interest to improve recognition accuracy. This would leverage learned features such as leaf patterns, growth forms, and colors that are common across many plant types.
+
+Ensemble Methods: Combining the predictions from multiple models might improve accuracy and reliability, as different models might learn to recognize different aspects of the plants.
+
+Advanced Segmentation Techniques: Implementing segmentation strategies that can distinguish individual plants within a crowded plot could aid in accurate species identification and counting. Techniques like semantic segmentation or instance segmentation could be instrumental in this regard.
+
+Data Augmentation: Given the limited data for some species, synthetic augmentation techniques like image rotation, scaling, cropping, and color variation could help in creating a more robust dataset.
+
+Incorporating Spatial Context: Some species might be identifiable not just by their appearance but by their typical spatial relationships with other species (e.g., certain plants might commonly occur next to or near others). AI models that can incorporate this level of spatial reasoning could potentially offer better performance.
+
+By tackling these challenges, the models developed in the PlanClef competition could significantly advance the field of ecological monitoring and conservation, providing tools that are not only more efficient but also potentially more accurate than manual methods currently in use.
+
+
+
+
+10% in two hours with 
+
+
+Get-BitLockerVolume -MountPoint E:\
+
+manage-bde -off E:
+
