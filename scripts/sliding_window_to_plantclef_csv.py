@@ -337,6 +337,8 @@ def groupProcess(data_by_filename, args):
                         if prob > class_probabilities[class_index]['max_prob']:
                             class_probabilities[class_index]['max_prob'] = prob
                         class_probabilities[class_index]['count'] += 1
+            
+            
         
        
         # sorted_class_indices = sorted(
@@ -345,7 +347,7 @@ def groupProcess(data_by_filename, args):
         #     reverse=True
         # )[:max_classes]
         # Try adjusting max classes
-        max_classes = adjust_max_classes(all_probs)
+        max_classes =12 # adjust_max_classes(all_probs)
         
         # Sort with weighted log strategy
         sorted_class_indices = sorted(
@@ -362,10 +364,15 @@ def groupProcess(data_by_filename, args):
             file_out.write(str_result)
 
     file_out.close()
+    
+    return class_probabilities
 
 def main(args):
     data_by_filename = setupBBFiles(args)
-    groupProcess(data_by_filename, args)
+    results = groupProcess(data_by_filename, args)
+    plot_class_probabilities(results)
+    
+    # Analysis on image 
     filenames = read_filenames(r"D:\PlantCLEF2024\PlantCLEF2024\PlantCLEF2024test\imagelist.txt")
     grouped_filenames = group_filenames(filenames)
     print("Finshed ")
