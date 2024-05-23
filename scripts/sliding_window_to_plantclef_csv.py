@@ -215,9 +215,9 @@ def setupBBFiles(args):
     data_by_filename = defaultdict(list)
     filetypes_class_index = [
         r'D:\pretrained_models\ResultsAll_518W_172S_150B.csv',  
-        r'D:\pretrained_models\ResultsAll_172W_172S_150B.csv'
+        r'D:\pretrained_models\ResultsAll_172W_172S_150B.csv'   
     ]
-    new_filetypes_class_index = []
+    new_filetypes_class_index = [r'D:\pretrained_models\ResultsAll_224W_112S_50B.csv']
 
    
 
@@ -267,16 +267,16 @@ def plot_class_probabilities(class_probabilities_all):
     plt.show()
 
 
-def adjust_max_classes(probabilities):
-    std_dev = np.std(probabilities)
-    if std_dev > 0.2:  # Adjust threshold as needed
-        return 6
-    elif std_dev > 0.1:
-        return 8
-    elif std_dev > 0.05:
-        return 10
+def adjust_max_classes(probabilities, avg_count, current_count):
+    # Adjust the number of classes based on the current count relative to the average count
+    if current_count > avg_count:
+        return 12 #
+    elif current_count > avg_count / 2:
+        return 9
+    elif current_count > avg_count / 3:
+        return 7
     else:
-        return 12
+        return 6
     
 def groupProcess(data_by_filename, args):
     file_path = r"D:\PlantCLEF2024\PlantCLEF2024\PlantCLEF2024test\imagelist.txt"
@@ -297,7 +297,8 @@ def groupProcess(data_by_filename, args):
         print(f"Processing group: {identifier} with {len(files)} files")
         filename_images_group = [file.replace(".jpg", "") for file in files]
         class_probabilities = defaultdict(lambda: {'max_prob': 0, 'count': 0})
-
+        
+        group_count_all = []
         for image_filename in filename_images_group:
             imagefile_data = data_by_filename[image_filename]
             image_masks_folder = os.path.join(base_directory_sam, image_filename)
@@ -315,7 +316,8 @@ def groupProcess(data_by_filename, args):
                 if percentage_white > 80:
                     file_mask_exists = False
                     print("bad file:", mask_path)
-
+            
+            all_counts = 0
             for row in imagefile_data:
                 for i in range(1, 6):
                     prob = float(row[f'probability_{i}'])
@@ -337,31 +339,29 @@ def groupProcess(data_by_filename, args):
                         if prob > class_probabilities[class_index]['max_prob']:
                             class_probabilities[class_index]['max_prob'] = prob
                         class_probabilities[class_index]['count'] += 1
+                        all_counts +=1
+        
+            group_count_all.append(all_counts)
             
             
+                 
+        avg_count_group = np.mean(all_counts)
+        index_current_cout = 0
         
-       
-        # sorted_class_indices = sorted(
-        #     class_probabilities.keys(),
-        #     key=lambda x: (class_probabilities[x]['max_prob'], class_probabilities[x]['count']),
-        #     reverse=True
-        # )[:max_classes]
-        # Try adjusting max classes
-        max_classes =12 # adjust_max_classes(all_probs)
-        
-        # Sort with weighted log strategy
-        sorted_class_indices = sorted(
-            class_probabilities.keys(),
-            key=lambda x: (class_probabilities[x]['max_prob'] * (1 + np.log1p(class_probabilities[x]['count']))),
-            reverse=True
-        )[:max_classes]
-
-        print(f"Top {max_classes} classes {identifier}: {sorted_class_indices}")
-
-        for image_filename in filename_images_group:
-            print(f"Top {max_classes} classes for {image_filename}: {sorted_class_indices}")
+        for image_filename, current_cout in zip(filename_images_group, group_count_all) :
+            
+            max_classes = adjust_max_classes(all_probs, avg_count_group, current_cout)
+    
+            sorted_class_indices = sorted(
+                class_probabilities.keys(),
+                key=lambda x: (class_probabilities[x]['max_prob'] * (1 + np.log1p(class_probabilities[x]['count']))),
+                reverse=True
+            )[:max_classes]
+    
+            print(f"Top {max_classes} classes for group {identifier}: {sorted_class_indices}")
             str_result = f"{image_filename};{list(sorted_class_indices)}\n"
             file_out.write(str_result)
+            index_current_cout +=1
 
     file_out.close()
     
