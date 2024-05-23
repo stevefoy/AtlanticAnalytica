@@ -7,6 +7,8 @@ import torch
 import torchvision.transforms as T
 from torchvision.utils import make_grid
 from torch.utils.data import Dataset, DataLoader
+from torchvision.transforms.functional import to_pil_image, to_tensor
+
 import matplotlib.pyplot as plt
 
 import numpy as np
@@ -21,6 +23,7 @@ from torchsummary import summary
 
 # Workaround for duplicate OpenMP libraries
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+
 def check_weights_loaded(model, args):
     """
     Checks if the weights are loaded correctly into the model by comparing
@@ -153,7 +156,7 @@ def sliding_window(image_tensor, window_size=518, step_size=518, border_offset=1
     # C, H, W are the channel, height, and width of the image tensor
     C, H, W = image_tensor.shape
     crops = []
-
+    cropsloc = []
     # Adjust start and end points for both x and y coordinates to account for the border offset
     for y in range(border_offset, H - window_size - border_offset + 1, step_size):
         for x in range(border_offset, W - window_size - border_offset + 1, step_size):
@@ -161,10 +164,11 @@ def sliding_window(image_tensor, window_size=518, step_size=518, border_offset=1
             crop = image_tensor[:, y:y+window_size, x:x+window_size]
             crops.append(crop)
             
+            
     return crops
 
 
-def sliding_window_batch(image_batch, window_size, step_size, border_offset):
+def sliding_window_batchV1(image_batch, window_size, step_size, border_offset):
     batch_crops = []
     for image_tensor in image_batch:
         # Assuming image_tensor is [C, H, W]
@@ -177,6 +181,27 @@ def sliding_window_batch(image_batch, window_size, step_size, border_offset):
             batch_crops.append(crop)
 
     return batch_crops
+
+def sliding_window_batch(image_batch, window_size, step_size, border_offset):
+    batch_crops = []
+    crop_centers = []  # List to hold the center coordinates of each crop
+
+    for image_tensor in image_batch:
+        # Assuming image_tensor is [C, H, W]
+        C, H, W = image_tensor.shape
+        # Adjust start and end points for both x and y coordinates to account for the border offset
+        for y in range(border_offset, H - window_size - border_offset + 1, step_size):
+            for x in range(border_offset, W - window_size - border_offset + 1, step_size):
+                # Extract the crop
+                crop = image_tensor[:, y:y+window_size, x:x+window_size]
+                batch_crops.append(crop)
+                # Calculate the center coordinates of the current crop
+                center_x = x + window_size // 2
+                center_y = y + window_size // 2
+                
+                crop_centers.append([center_x, center_y])
+
+    return batch_crops, crop_centers
 
 # Function to create a mosaic image from crops
 def create_mosaic(crops, nrow):
@@ -203,13 +228,16 @@ class SpeciesImageDataset(Dataset):
         return image, image_path
 
 class ImageCropDatasetGreen(Dataset):
-    def __init__(self, crops):
+    def __init__(self, crops, crops_centre):
         """
         crops: List of image crops (as PIL Images or paths to images)
         """
         self.crops = crops
+        self.crops_centre = crops_centre
         self.transform = T.Compose([
-            T.ToTensor(), # Convert images to tensor before normalization
+            # T.ToTensor(), # Convert images to tensor before normalization
+            # T.Resize(size=518, interpolation=T.InterpolationMode.BICUBIC, max_size=None, antialias=True),
+            # T.CenterCrop(size=(518, 518)),
             T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
@@ -218,25 +246,64 @@ class ImageCropDatasetGreen(Dataset):
 
     def __getitem__(self, idx):
         crop = self.crops[idx]
-        if isinstance(crop, str):
-            # Assuming crop is a path to the image file
-            crop = Image.open(crop).convert('RGB')
-        hsv_crop = crop.convert('HSV')
-        np_hsv_crop = np.array(hsv_crop)
+        centre = self.crops_centre[idx]
+        """
+        # Convert tensor to PIL Image in RGB
+        img_pil_rgb = to_pil_image(crop)
+        
+        # Convert PIL Image from RGB to HSV
+        img_pil_hsv = img_pil_rgb.convert('HSV')
+        
+        
+        np_hsv_crop = np.array(img_pil_hsv)
+
 
         # Define your green range in HSV
-        lower_green = np.array([35, 100, 100])
-        upper_green = np.array([75, 255, 255])
+        #lower_green = np.array([35, 100, 100])
+        #upper_green = np.array([75, 255, 255])
+        
+        lower_green = np.array([30, 50, 50])  # loking at gimp more yellow-greens and less saturated greens
+        upper_green = np.array([85, 255, 255]) # Extend to bluish-greens and very bright greens
 
         # Mask to detect green areas
         green_mask = np.all(np_hsv_crop >= lower_green, axis=-1) & np.all(np_hsv_crop <= upper_green, axis=-1)
-        green_percentage = np.mean(green_mask) * 100
+        green_percentage = int(np.mean(green_mask) * 100)
 
+
+        lower_brown = np.array([10, 50, 50])
+        upper_brown = np.array([30, 150, 150])
+        
+        
+        # Mask to detect green areas
+        brown_mask = np.all(np_hsv_crop >= lower_brown, axis=-1) & np.all(np_hsv_crop <= upper_brown, axis=-1)
+        brown_percentage = int(np.mean(brown_mask) * 100)
+
+
+        lower_brown = np.array([10, 50, 50])
+        upper_brown = np.array([30, 150, 150])
+        
+        
+        # Mask to detect green areas
+        brown_mask = np.all(np_hsv_crop >= lower_brown, axis=-1) & np.all(np_hsv_crop <= upper_brown, axis=-1)
+        brown_percentage = int(np.mean(brown_mask) * 100)
+        
+        
+        lower_grey = np.array([0, 0, 50])  # Assuming a bit of leeway for 'dark greys'
+        upper_grey = np.array([180, 50, 200])  # Broad hue range, low saturation, moderate-high value
+
+        # Mask to detect green areas
+        grey_mask = np.all(np_hsv_crop >= lower_grey, axis=-1) & np.all(np_hsv_crop <= upper_grey, axis=-1)
+        grey_percentage = int(np.mean(grey_mask) * 100)
+        
+        """
+        green_percentage = 0
+        brown_percentage = 0
+        grey_percentage  = 0
         # Apply transforms to the original RGB crop
         x = self.transform(crop)
         
         # Assuming you want to return the green percentage along with the image tensor
-        return x, green_percentage
+        return x, centre, green_percentage, brown_percentage, grey_percentage
 
 class ImageCropDataset(Dataset):
     def __init__(self, crops, transforms):
@@ -272,6 +339,23 @@ std = torch.tensor([0.229, 0.224, 0.225])
 mean = mean[:, None, None]
 std = std[:, None, None]
 
+def format_for_csv(data):
+    formatted_list = []
+    
+    # Iterate through the complex nested list structure
+    for entry in data:
+        for result in entry:
+            # Extracting tensor values and converting numpy arrays to string
+            tensors = [str(tensor.item()) for tensor in result[0]]
+            arrays = [np.array2string(array, separator=',').replace('\n', '').strip('[]') for array in result[1:]]
+            
+            # Combine the formatted parts
+            formatted_result = ";".join(tensors + arrays)
+            formatted_list.append(formatted_result)
+    
+    # Combine all formatted results separated by semicolon
+    return ";".join(formatted_list)
+
 # Assuming `crop` is a tensor representing an image crop
 def annotate_crop(crop, annotation_text_list, device):
     # Convert tensor to PIL Image
@@ -298,6 +382,9 @@ def annotate_crop(crop, annotation_text_list, device):
     ])
     crop_annotated = transform_back(crop_image).to(device)
     return crop_annotated
+
+
+
 
 def visualize_attention_map(img, attention_map, block_index, head_index):
     # Assuming img is a PyTorch tensor of shape (C, H, W)
@@ -495,8 +582,8 @@ def main(args, DEBUG=True):
     file_out.write("plot_id;species_ids"+str('\n') )
     file_out_prob.write("plot_id;species_ids"+str('\n') )
     counter = 0
-    top_probabilities = []
-    dynamic_threshold = 10
+    
+    dynamic_threshold = 15
     for img_tensor, file_path in tqdm(data_loader): 
         # print("Found image file: ", file_path)
         file_name_with_extension = os.path.basename(file_path[0])
@@ -504,99 +591,118 @@ def main(args, DEBUG=True):
 
 
         # Example usage
-        window_size =  518  # The size of the window
-        step_size = int(518)    # How much the window slides each time. This could be less than window_size if you want overlapping windows
-        border_offset = 200  # Starting the window 100 pixels from the border
+        window_size =  int(518)  # The size of the window
+        step_size = int(518//3)    # How much the window slides each time. This could be less than window_size if you want overlapping windows
+        border_offset = 150  # Starting the window 100 pixels from the border
 
         # Assuming image_tensor is your loaded image as a tensor
-        crops = sliding_window_batch(img_tensor, window_size, step_size, border_offset)
+        crops,crops_centre  = sliding_window_batch(img_tensor, window_size, step_size, border_offset)
 
         # dataset_crops = ImageCropDataset(crops, transforms_trained)
-        dataset_crops = ImageCropDatasetGreen(crops)
-        data_crop_loader = DataLoader(dataset_crops, batch_size=4, shuffle=False, num_workers=8)
+        dataset_crops = ImageCropDatasetGreen(crops,crops_centre)
+        data_crop_loader = DataLoader(dataset_crops, batch_size=1, shuffle=False, num_workers=8)
 
         species_id_set = set()
         species_id_max_proba = {} 
         
-
+        top_probabilities = []
         crops_annotated = []
-        for i, crop, green_percentage in enumerate(data_crop_loader):
-
-            img = crop.to(device)
-            # print(img.shape)
+        for i, (crop, crop_cord, green_percentage, brown_percentage, grey_percentage) in enumerate(data_crop_loader):
             
-            attention_maps.clear()
-            output = model(img)  # unsqueeze single image into batch of 1
-            
-            # visualize_attention_mapV2(attention_maps[0])
-
-            
-            
-            
-            
-            top5_probabilities, top5_class_indices = torch.topk(output.softmax(dim=1) * 100, k=5)
-            top5_probabilities = top5_probabilities.cpu().detach().numpy()
-            top5_class_indices = top5_class_indices.cpu().detach().numpy()
-            
-            max_proba = np.max(top5_probabilities)
-            top_probabilities.append(max_proba)
-
-             
-            annotation_text_list =[]
-            for proba, cid in zip(top5_probabilities[0], top5_class_indices[0]):
-                species_id = cid_to_spid[cid]
-                # print("species_id type", type(species_id))
-                if proba > dynamic_threshold:
-                    
-
-                    species_id_set.add(int(species_id))
-                    species = spid_to_sp[species_id]
-                    # print(species_id, species, proba)
-                    # Check if this species_id already has a recorded probability
-                    if species_id in species_id_max_proba:
-                        # If the current probability is higher, update it
-                        if proba > species_id_max_proba[species_id]:
+            if True:
+            #if green_percentage > 30 and grey_percentage < 25 and  brown_percentage < 10 : # if we have more 10 % in the patch then do classification
+                
+                img = crop.to(device)
+                # print(img.shape)
+                
+                attention_maps.clear()
+                output = model(img)  # unsqueeze single image into batch of 1
+                
+                # visualize_attention_mapV2(attention_maps[0])
+    
+                
+                
+                
+                
+                top5_probabilities, top5_class_indices = torch.topk(output.softmax(dim=1) * 100, k=5)
+                top5_probabilities = top5_probabilities.cpu().detach().numpy()
+                top5_class_indices = top5_class_indices.cpu().detach().numpy()
+                
+                max_proba = np.max(top5_probabilities)
+                data_packet = str(crop_cord[0].item()) + str(", ") + str(crop_cord[1].item()) + str(", ") + str(top5_probabilities.tolist()) 
+                data_packet += str(", ") + str(top5_class_indices.tolist())
+                
+    
+                 
+                annotation_text_list =[]
+                for proba, cid in zip(top5_probabilities[0], top5_class_indices[0]):
+                    species_id = cid_to_spid[cid]
+                    # print("species_id type", type(species_id))
+                    if proba > dynamic_threshold:
+                        
+    
+                        species_id_set.add(int(species_id))
+                        species = spid_to_sp[species_id]
+                        # print(species_id, species, proba)
+                        # Check if this species_id already has a recorded probability
+                        if species_id in species_id_max_proba:
+                            # If the current probability is higher, update it
+                            if proba > species_id_max_proba[species_id]:
+                                species_id_max_proba[species_id] = proba
+                        else:
+                            # If the species_id is not in the dictionary, add it
                             species_id_max_proba[species_id] = proba
-                    else:
-                        # If the species_id is not in the dictionary, add it
-                        species_id_max_proba[species_id] = proba
+                    
+                    annotation_text = f"ID: {species_id}, P: {proba:.0f}%"
+                    annotation_text_list.append(annotation_text)
                 
-                annotation_text = f"ID: {species_id}, P: {proba:.0f}%"
-                annotation_text_list.append(annotation_text)
-                annotation_text_list.append("% Green "+str(green_percentage))
+                annotation_text_list.append(str(green_percentage.numpy()))
+                annotation_text_list.append(str(brown_percentage.numpy()))
+                annotation_text_list.append(str(grey_percentage.numpy()))
+                    
+                if DEBUG == True:
+                    crop_annotated = annotate_crop( crop, annotation_text_list, device)
+                    crops_annotated.append(crop_annotated)
+            else:
+                data_packet = str(crop_cord[0].item())+str(", ")+str(crop_cord[1].item())+str(", ")
+            
+            str_result_prob  = file_name.rstrip()+";"+str(i)+";"+data_packet+str("\n")
+            file_out_prob.write(str_result_prob)
                 
-            if DEBUG == True:
-                crop_annotated = annotate_crop( crop, annotation_text_list, device)
-                crops_annotated.append(crop_annotated)
+                
         
         if DEBUG == True:
-            visualize_attention_map(crop, attention_maps[0], 0, 0)
+            # visualize_attention_map(crop, attention_maps[0], 0, 0)
             counter = counter+1
-
-            grid_img = make_grid(crops_annotated, nrow=5)  # Adjust `nrow` based on your preference
-
-            # Convert grid to a PIL Image for saving
-            grid_img_pil = T.ToPILImage()(grid_img.cpu()).convert("RGB")
-
-            # Save or display the mosaic image
-            mosaic_path = str('./crops_images/')+file_name+'mosaic_image.jpg'
-
-            grid_img_pil.save(mosaic_path)
+            if len(crops_annotated) > 0:
+                if len(crops_annotated)>5:
+                    grid_img = make_grid(crops_annotated, nrow=5)  # Adjust `nrow` based on your preference
+                else:
+                    grid_img = make_grid(crops_annotated, nrow=1)
+    
+                # Convert grid to a PIL Image for saving
+                grid_img_pil = T.ToPILImage()(grid_img.cpu()).convert("RGB")
+    
+                # Save or display the mosaic image
+                mosaic_path = str('./crops_images/')+file_name+'mosaic_image.jpg'
+    
+                grid_img_pil.save(mosaic_path)
+            else:
+                print("error", file_name.rstrip())
             # mosaic_image.show()
-        if counter > 10:
+        if counter > 40:
             break
         
-        dynamic_threshold = np.percentile(top5_probabilities , 90)
+        #dynamic_threshold = np.percentile(top5_probabilities , 90)
 
 
-        str_result = file_name.rstrip()+";"+str(list(species_id_set))+str(";")+str('\n') 
+        str_result = file_name.rstrip()+";"+str(list(species_id_set))+str("")+str('\n') 
         
         #print(species_id_max_proba)
         
-        top_5 = np.sort(top_probabilities )[::-1][:5]
+        #top_5 = np.sort(top_probabilities )[::-1][:5]
 
-        str_result_top_5  = file_name.rstrip()+";"+str(dynamic_threshold)+str(';')+str(list(top_5))+str("")+str('\n') 
-        file_out_prob.write(str_result_top_5)
+
         file_out.write(str_result)
 
     file_out.close()
@@ -640,13 +746,13 @@ if __name__ == '__main__':
 
 
     parser.add_argument("--class_mapping", type=str, default='class_mapping.txt')
-    parser.add_argument("--species_mapping", type=str) #'species_id_to_name.txt'
+    parser.add_argument("--species_mapping", type=str, default='species_id_to_name.txt')
     
-    parser.add_argument("--pretrained_path", type=str) #model_best.pth.tar
+    parser.add_argument("--pretrained_path", type=str, default='./vit_base_patch14_reg4_dinov2_lvd142m_pc24_onlyclassifier_then_all/model_best.pth.tar')
 
     parser.add_argument("--device", type=str, default='cuda')
 
-    parser.add_argument("--testfolder_path", type=str)
+    parser.add_argument("--testfolder_path", type=str, default='D:\\PlantCLEF2024\\PlantCLEF2024\\PlantCLEF2024test\\images\\' )
     
     args = parser.parse_args()
     
@@ -655,4 +761,4 @@ if __name__ == '__main__':
     
     #
 
-    main(args, DEBUG=True)
+    main(args, DEBUG=False)
