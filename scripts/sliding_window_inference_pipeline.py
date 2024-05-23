@@ -282,12 +282,17 @@ class loadImageDatasetOLD(Dataset):
 
         return image, image_path
 
-class loadImageDatasetV2(Dataset):
+class loadImageDataset(Dataset):
     def __init__(self, image_files):
         self.image_files = image_files
+        self.transform = T.Compose([
+            T.ToTensor(),
+            ])
 
     def __len__(self):
         return len(self.image_files)
+
+
 
     def histogram_equalization(self, img):
         # Convert PIL image to numpy array (RGB)
@@ -315,10 +320,13 @@ class loadImageDatasetV2(Dataset):
 
         # Apply histogram equalization to the image
         image_eq = self.histogram_equalization(image)
+        
+        # Apply transformation to tensor
+        image_tensor = self.transform(image_eq)
 
-        return image_eq, image_path
+        return image_tensor, image_path
 
-class loadImageDataset(Dataset):
+class loadImageDatasetV2(Dataset):
     def __init__(self, image_files):
         self.image_files = image_files
         self.to_tensor = T.ToTensor()
@@ -616,16 +624,25 @@ def main(args, DEBUG=True):
     
     
     # load the image files for clef full
-    file_path = "C:\\Users\\stevf\\OneDrive\\Documents\\datasets\\test_set\\imagelist.txt"
-    image_full_path = "C:\\Users\\stevf\\OneDrive\\Documents\\datasets\\test_set\\images\\"
+    file_path = r"C:\Users\stevf\OneDrive\Documents\datasets\test_set\imagelist.txt"
+    image_full_path = r"C:\Users\stevf\OneDrive\Documents\datasets\test_set\images"
     
     # load the image files for clef annotation test
-   # file_path = "D:\\PlantCLEF2024\\annotated\\imagelist.txt"
-
-   # image_full_path = "D:\\PlantCLEF2024\\annotated\\images\\"
+    file_path = r"D:\PlantCLEF2024\annotated\imagelist.txt"
+    image_full_path = r"D:\PlantCLEF2024\annotated\images"
       
+    from datetime import datetime
+
+    # Get current date and time
+    now = datetime.now()
     
-    
+    # Convert to a very short string format, including 24-hour and minute (e.g., "202405061530" for May 6, 2024, 3:30 PM)
+    short_date_time_string = now.strftime("%m%d%H%M")
+    short_date_time_string = now.strftime("%m%d%H%M")
+    result_path = r"D:\PlantCLEF2024\annotated\Results"
+   
+    csv_file = "bb518_s112_R3_eql_T"+short_date_time_string+".csv"
+    csv_file = os.path.join(result_path, csv_file)
     
     image_files = []
     with open(file_path, 'r') as file:
@@ -681,11 +698,11 @@ def main(args, DEBUG=True):
     counter = 0
     
 
-    csv_file = r"D:\pretrained_models\bb518_s112_R3_eql_HSV.csv"
+    
     csv_headers = ["filename", "x1", "y1", "x2", "y2", "crop_index", "class_index_1", "probability_1", "class_index_2", "probability_2", "class_index_3", "probability_3", "class_index_4", "probability_4", "class_index_5", "probability_5"]
 
     # Open the CSV file for writing
-    file_out_prob = open(csv_file, mode='a', newline='')
+    file_out_prob = open(csv_file, mode='w', newline='')
     writer = csv.writer(file_out_prob)
     writer.writerow(csv_headers)  # Write the header
     
@@ -699,7 +716,7 @@ def main(args, DEBUG=True):
         # Example usage
         
         window_size =  int(518)  # The size of the window
-        step_size = int(172)    # How much the window slides each time. This could be less than window_size if you want overlapping windows
+        step_size = int(50)    # How much the window slides each time. This could be less than window_size if you want overlapping windows
         border_offset = 50  # Starting the window 100 pixels from the border
 
         # Assuming image_tensor is your loaded image as a tensor
