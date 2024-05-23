@@ -41,25 +41,15 @@ def process_csv_and_analyze_classes_with_probabilities( args):
     
     
     # SAVE DATA FOR HUGGINFACE PUSH
-    output_hugginface =  'D:\\PlantCLEF2024\\annotated\\dinoV2_results_thres.csv'
+    output_hugginface =  'D:\\PlantCLEF2024\\annotated\\dinoV2_results_thresv2.csv'
     file_out = open(output_hugginface, 'w')
     
     
     
     file_out.write("plot_id;species_ids"+str('\n') )
     
-    # Open the CSV file
-    for fileName in filetypes_class_index:
-        with open(fileName , mode='r') as file:
-            # Create a DictReader object to read the CSV file
-            reader = csv.DictReader(file, delimiter=',')
-            # Group rows by filename
-            for row in reader:
-                
-                data_by_filename[row['filename']].append(row)
-                #print(row)
-                #raise ValueError('A very specific bad thing happened.')
-    """          
+
+         
     # Open the CSV file 2
     for fileName in filetypes_class_index:
         with open(fileName , mode='r') as file:
@@ -68,24 +58,26 @@ def process_csv_and_analyze_classes_with_probabilities( args):
             # Group rows by filename
             for row in reader:
                 for i in range(1, 6):  # Assuming up to 5 classes per crop
-                    prob = float(row[f'probability_{i}'])
+                    #prob = float(row[f'probability_{i}'])
                     class_index = row[f'class_index_{i}']
-                    
-                    if prob > min_threshold  :
-                        value = class_probabilities.get(class_index)
-                        
-                        if value is not None:
-                            
-                            if value[0] < prob:
-                                class_probabilities[class_index].append(prob)
-                        else:
-                            class_probabilities[class_index].append(prob)
+                    row[f'class_index_{i}']=int(cid_to_spid[int(class_index)])
+ 
                 
                 data_by_filename[row['filename']].append(row)
                 #print(row)
                 #raise ValueError('A very specific bad thing happened.')
+    
+    # Open the CSV file
+    for fileName in new_filetypes_class_index:
+        with open(fileName , mode='r') as file:
+            # Create a DictReader object to read the CSV file
+            reader = csv.DictReader(file, delimiter=',')
+            # Group rows by filename
+            for row in reader:
                 
-    """
+                data_by_filename[row['filename']].append(row)
+                #print(row)
+                #raise ValueError('A very specific bad thing happened.')
     
     highest_probabilities = defaultdict(lambda: defaultdict(float))       
              
@@ -104,32 +96,35 @@ def process_csv_and_analyze_classes_with_probabilities( args):
             for i in range(1, 6):  # Assuming up to 5 classes per crop
                 prob = float(row[f'probability_{i}'])
                 class_index = row[f'class_index_{i}']
-                
-                if prob > min_threshold  :
-                    value = class_probabilities.get(class_index)
-                    
-                    if value is not None:
-                        
-                        if value[0] < prob:
-                            class_probabilities[class_index].append(prob)
-                    else:
-                        class_probabilities[class_index].append(prob)
-                    
+
+                if prob > min_threshold:
+                    current_max_prob = class_probabilities.get(class_index, 0)
+                    if prob > current_max_prob:
+                        class_probabilities[class_index] = prob   
+
     
         species_id_set = set()
-        sorted_class_indices = sorted(class_probabilities, key=lambda x: max(class_probabilities[x]), reverse=True)[:max_classes]
-    
-        for class_index in sorted_class_indices:
-            probabilities = class_probabilities[class_index]
-            percentile_98 = np.percentile(probabilities, 98)
-    
-            if any(prob >= percentile_98 for prob in probabilities):
 
-                    # Map class index to species ID and add to set
-                species_id_set.add(int(cid_to_spid[int(class_index)])) 
+        #print(class_probabilities)
+        sorted_class_indices = sorted(class_probabilities, key=lambda x: class_probabilities[x], reverse=True)[:max_classes]
+
+        #print(type(sorted_class_indices))
+    
+        #raise Exception('STOP!')
+        for class_index in sorted_class_indices:
+            max_probability = class_probabilities[class_index]
+            
+            # Decision point: Define a threshold to decide if this max_probability should lead to action
+            # Example: Define a threshold (you might need to adjust based on your needs)
+            threshold = 20  # This would need to be defined based on the scale of your probabilities
+        
+            # Check if the max_probability is greater than or equal to threshold
+            if max_probability >= threshold and max_probability <90:
+                # Map class index to species ID and add to set, assuming cid_to_spid mapping exists
+                #species_id_set.add(int(cid_to_spid[int(class_index)]))
 
                     #New version Map class index to species ID and add to set
-#                    species_id_set.add(int(class_index))  
+                species_id_set.add(int(class_index))  
 
     
         str_result = f"{filename.rstrip()};{list(species_id_set)}\n"
