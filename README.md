@@ -105,8 +105,8 @@ The code structure overview
 
     @inproceedings{PlantCLEF2024,
         author = {Stephen Foy and Simon McLoughlin},
-        title = {Slide and Check with Dino V2 PLANT CLEF 2024},
-        booktitle = {PlantCLEF 2024},
+        title = {Utilizing Dino V2 for Domain Adaptation in Vegetation Plot Analysis},
+        booktitle = {CLEF 2024: Conference and Labs of the Evaluation Forum},
         year = {2024}
     }
 
