@@ -31,6 +31,10 @@
     plt.colorbar()
     plt.show()
 ###
+
+### Exported summary of Dino V2 arch model of the loaded weighted
+
+
 Parameter snapshots before loading:
 head.weight: tensor([ 0.0853, -0.1351,  0.0422, -0.0507, -0.0793])...
 head.bias: tensor([0.1992, 0.5086, 0.6085, 0.4070, 0.6837])...
@@ -215,7 +219,7 @@ head.bias: tensor([0.1992, 0.5086, 0.6085, 0.4070, 0.6837])...
 
 
 
-
+### Exported summary of Dino V2 arch model of the loaded weighted
 
 
 
