@@ -79,7 +79,7 @@ The code structure overview
   ├── ./script/sliding_window_to_plantclef_csv.py - Data process  
   │
   │
-  ├── models/ - contains Dino V2 models from Team CLEF 2024
+  ├── models/ - contains Dino V2 models from Team CLEF 2025
   │
   │
   ├── database/
@@ -105,8 +105,8 @@ The code structure overview
 
     @inproceedings{PlantCLEF2024,
         author = {Stephen Foy and Simon McLoughlin},
-        title = {Utilizing Dino V2 for Domain Adaptation in Vegetation Plot Analysis},
-        booktitle = {CLEF 2024: Conference and Labs of the Evaluation Forum},
+        title = {Utilizing Dino V2 with GAN for Domain Adaptation in Vegetation Plot Analysis},
+        booktitle = {CLEF 2025: Conference and Labs of the Evaluation Forum},
         year = {2024}
     }
 
